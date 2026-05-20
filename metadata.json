@@ -1,0 +1,12 @@
+{
+  "name": "DigiKiot ERP",
+  "description": "Hệ thống quản lý bán hàng, tồn kho và lắp đặt camera DigiKiot",
+  "requestFramePermissions": [
+    "geolocation",
+    "identity-credentials-get",
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

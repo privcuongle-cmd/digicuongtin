@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#2563eb" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Digikiot" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/png" href="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjdQP0PicQxdVjonWLo_k6WbJVjn2y3OVvrBw3JYpe6pIlbJStebP6OB3QBG9BVvcTWfoFj4g26FZBvUN-GefJXgjQrUA3LWRpYe2xvA3TijfQi0Llm9gQKj-eHSEfj2FFft65XBgGIWTZ9WQGnx0rVZz5PJ95PYsI6jBiKqtcTd145uKYZG5Vu_d53jWA/s1600/logo.png" />
+    <link rel="apple-touch-icon" href="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjdQP0PicQxdVjonWLo_k6WbJVjn2y3OVvrBw3JYpe6pIlbJStebP6OB3QBG9BVvcTWfoFj4g26FZBvUN-GefJXgjQrUA3LWRpYe2xvA3TijfQi0Llm9gQKj-eHSEfj2FFft65XBgGIWTZ9WQGnx0rVZz5PJ95PYsI6jBiKqtcTd145uKYZG5Vu_d53jWA/s1600/logo.png" />
+    <title>Digikiot</title>
+    <script>
+      // Force orientation to portrait if supported
+      if (screen.orientation && screen.orientation.lock) {
+        screen.orientation.lock('portrait').catch(function(error) {
+          console.log("Orientation lock not supported or failed:", error);
+        });
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

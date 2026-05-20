@@ -1,0 +1,24 @@
+{
+  "name": "Digikiot",
+  "short_name": "Digikiot",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "prefer_related_applications": false,
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjdQP0PicQxdVjonWLo_k6WbJVjn2y3OVvrBw3JYpe6pIlbJStebP6OB3QBG9BVvcTWfoFj4g26FZBvUN-GefJXgjQrUA3LWRpYe2xvA3TijfQi0Llm9gQKj-eHSEfj2FFft65XBgGIWTZ9WQGnx0rVZz5PJ95PYsI6jBiKqtcTd145uKYZG5Vu_d53jWA/s1600/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjdQP0PicQxdVjonWLo_k6WbJVjn2y3OVvrBw3JYpe6pIlbJStebP6OB3QBG9BVvcTWfoFj4g26FZBvUN-GefJXgjQrUA3LWRpYe2xvA3TijfQi0Llm9gQKj-eHSEfj2FFft65XBgGIWTZ9WQGnx0rVZz5PJ95PYsI6jBiKqtcTd145uKYZG5Vu_d53jWA/s1600/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

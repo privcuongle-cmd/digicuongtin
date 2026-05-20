@@ -1,0 +1,84 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Be+Vietnam+Pro:wght@300;400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+  .animate-ring-delay {
+    animation: ring-bell 6s infinite;
+    transform-origin: top center;
+  }
+}
+
+@keyframes ring-bell {
+  0%, 16%, 100% { transform: rotate(0); }
+  2%, 6%, 10%, 14% { transform: rotate(15deg); }
+  4%, 8%, 12% { transform: rotate(-15deg); }
+}
+
+@theme {
+  --font-sans: "Be Vietnam Pro", "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    font-size: 16px;
+  }
+  body {
+    @apply font-sans antialiased text-slate-900;
+    font-size: 15px;
+  }
+  
+  /* Hide scrollbar for mobile/tablet only */
+  @media (max-width: 1024px) {
+    ::-webkit-scrollbar {
+      display: none;
+    }
+    html {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  }
+
+  /* Custom scrollbar for Desktop to make it look nicer */
+  @media (min-width: 1025px) {
+    ::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+      border-radius: 5px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 5px;
+      border: 2px solid #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+    }
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #print-section, #print-section * {
+    visibility: visible;
+  }
+  #print-section {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 20px;
+  }
+}
