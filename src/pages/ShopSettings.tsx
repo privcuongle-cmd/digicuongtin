@@ -90,6 +90,8 @@ export const ShopSettings: React.FC = () => {
       reader.onloadend = () => {
         if (typeof reader.result === 'string') {
           setShopLogo(reader.result);
+          // Auto-save instantly so that print templates can render it immediately without waiting for form submission
+          localStorage.setItem('digikiot_shop_logo', reader.result);
         }
       };
       reader.readAsDataURL(file);
