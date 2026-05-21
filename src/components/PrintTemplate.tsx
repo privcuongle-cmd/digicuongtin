@@ -24,7 +24,7 @@ interface PrintTemplateProps {
 export const PrintTemplate: React.FC<PrintTemplateProps> = ({
   title, id, date, partner, phone, address, items, total, paid, debt, oldDebt = 0, discount, note, type
 }) => {
-  const { printSettings } = useAppContext();
+  const { printSettings, products } = useAppContext();
   
   // Make retrieval of logo robust
   let shopLogo = localStorage.getItem('digikiot_shop_logo');
@@ -116,16 +116,20 @@ export const PrintTemplate: React.FC<PrintTemplateProps> = ({
               </tr>
             </thead>
             <tbody>
-              {items.map((item, idx) => (
-                <tr key={`print-item-${item.name}-${idx}`} className="border-b border-slate-400 text-slate-900">
-                  <td className="py-1 px-2 text-center border-r border-slate-400">{idx + 1}</td>
-                  <td className="py-1 px-2 border-r border-slate-400">{item.name}</td>
-                  <td className="py-1 px-2 text-center border-r border-slate-400">{item.unit || 'Cái'}</td>
-                  <td className="py-1 px-2 text-center border-r border-slate-400">{item.qty}</td>
-                  <td className="py-1 px-2 text-right border-r border-slate-400">{formatNumber(item.price)}</td>
-                  <td className="py-1 px-2 text-right font-medium">{formatNumber(item.total)}</td>
-                </tr>
-              ))}
+              {items.map((item, idx) => {
+                const matchedProduct = products?.find(p => p.id === item.id || p.name === item.name);
+                const displayUnit = item.unit || matchedProduct?.unit || 'Cái';
+                return (
+                  <tr key={`print-item-${item.name}-${idx}`} className="border-b border-slate-400 text-slate-900">
+                    <td className="py-1 px-2 text-center border-r border-slate-400">{idx + 1}</td>
+                    <td className="py-1 px-2 border-r border-slate-400">{item.name}</td>
+                    <td className="py-1 px-2 text-center border-r border-slate-400">{displayUnit}</td>
+                    <td className="py-1 px-2 text-center border-r border-slate-400">{item.qty}</td>
+                    <td className="py-1 px-2 text-right border-r border-slate-400">{formatNumber(item.price)}</td>
+                    <td className="py-1 px-2 text-right font-medium">{formatNumber(item.total)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

@@ -52,6 +52,7 @@ export interface InvoiceItem {
   sn?: string;
   importPriceTotal?: number;
   warrantyExpiry?: string;
+  unit?: string;
 }
 
 export interface Invoice {

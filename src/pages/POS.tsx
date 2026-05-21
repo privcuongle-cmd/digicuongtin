@@ -489,7 +489,8 @@ return (
           qty: 1, 
           hasSerial: true,
           serials: [sn],
-          importPriceTotal: product.importPrice 
+          importPriceTotal: product.importPrice,
+          unit: product.unit
         }];
       }
 
@@ -502,7 +503,8 @@ return (
         name: product.name, 
         price: product.price, 
         qty: 1, 
-        importPriceTotal: product.importPrice 
+        importPriceTotal: product.importPrice,
+        unit: product.unit
       }];
     });
     
@@ -603,7 +605,8 @@ return (
             qty: item.qty,
             sn: item.serials?.join(', '),
             importPriceTotal: item.importPriceTotal ? item.importPriceTotal * item.qty : 0,
-            warrantyExpiry
+            warrantyExpiry,
+            unit: item.unit || p?.unit
           };
         })
       };

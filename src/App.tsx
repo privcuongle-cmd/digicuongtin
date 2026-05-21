@@ -101,9 +101,48 @@ const AppRoutes = () => {
 };
 
 export default function App() {
+  React.useEffect(() => {
+    // Attempt to lock screen orientation to portrait if supported
+    const lockScreen = async () => {
+      try {
+        const screenObj = (window.screen || {}) as any;
+        const orientationObj = screenObj.orientation;
+        if (orientationObj && typeof orientationObj.lock === 'function') {
+          await orientationObj.lock('portrait');
+        }
+      } catch (err) {
+        // Safe to ignore if browser sandboxes or fails the lock request
+        console.warn('Unable to lock screen orientation:', err);
+      }
+    };
+    lockScreen();
+  }, []);
+
   return (
     <AppProvider>
       <AppRoutes />
+      {/* Mobile Orientation Alert Overlay */}
+      <div className="orientation-lock-overlay fixed inset-0 z-[9999999] hidden flex-col items-center justify-center bg-slate-950 text-white p-6 text-center select-none">
+        <div className="p-4 bg-slate-900 rounded-full mb-6 relative animate-pulse">
+          <svg className="w-12 h-12 text-blue-500 animate-spin" style={{ animationDuration: '3s' }} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89M9 11l3-3 3 3m-3-3v12" />
+          </svg>
+        </div>
+        <h3 className="text-lg font-bold mb-2 uppercase tracking-wide text-blue-400">Vui lòng xoay dọc thiết bị</h3>
+        <p className="text-slate-400 text-xs max-w-xs leading-relaxed">
+          Phần mềm Cường Tín tối ưu hiển thị theo chiều dọc trên điện thoại. Hãy đặt thiết bị thẳng đứng để tiếp tục sử dụng.
+        </p>
+      </div>
+      <style>{`
+        @media screen and (max-width: 932px) and (orientation: landscape) and (pointer: coarse) {
+          .orientation-lock-overlay {
+            display: flex !important;
+          }
+          body {
+            overflow: hidden !important;
+          }
+        }
+      `}</style>
     </AppProvider>
   );
 }
