@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Plus, Camera as CameraIcon, User, Phone, MapPin, Calendar, Trash2, Edit3, MoreHorizontal, X, Save, Shield, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Plus, Camera as CameraIcon, User, Phone, MapPin, Calendar, Trash2, Edit3, MoreHorizontal, X, Save, Shield, ChevronLeft, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { CameraAccountRecord } from '../types';
@@ -17,6 +17,19 @@ export const CameraManagement: React.FC = () => {
   const [editingRecord, setEditingRecord] = useState<CameraAccountRecord | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [revealedAccountId, setRevealedAccountId] = useState<string | null>(null);
+
+  // Determine whether to mask camera account names by default based on roles and settings
+  const shouldMaskByDefault = useMemo(() => {
+    const isAdmin = currentUser?.role === 'ADMIN';
+    if (isAdmin) {
+      const stored = localStorage.getItem('digikiot_hide_camera_acc_admin');
+      return stored === null ? true : stored === 'true';
+    } else {
+      const stored = localStorage.getItem('digikiot_hide_camera_acc_staff');
+      return stored === null ? true : stored === 'true';
+    }
+  }, [currentUser]);
 
   // Form state
   const [customerName, setCustomerName] = useState('');
@@ -214,9 +227,25 @@ return (
                       {record.customerPhone}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2 text-slate-700 font-bold">
-                        <Shield size={16} className="text-emerald-500" />
-                        {record.accountName}
+                      <div className="flex items-center gap-2 justify-between max-w-[280px]">
+                        <div className="flex items-center gap-2 text-slate-700 font-bold overflow-hidden">
+                          <Shield size={16} className="text-emerald-500 shrink-0" />
+                          <span className="truncate font-mono tracking-wider">
+                            {!shouldMaskByDefault || revealedAccountId === record.id ? record.accountName : '******'}
+                          </span>
+                        </div>
+                        {shouldMaskByDefault && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRevealedAccountId(revealedAccountId === record.id ? null : record.id);
+                            }}
+                            className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors shrink-0"
+                            title={revealedAccountId === record.id ? 'Ẩn tài khoản' : 'Hiện tài khoản'}
+                          >
+                            {revealedAccountId === record.id ? <EyeOff size={15} /> : <Eye size={15} />}
+                          </button>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
@@ -270,9 +299,24 @@ return (
 
               {expandedId === record.id && (
                 <div className="px-3 pb-3 pt-2 border-t border-slate-50 bg-slate-50/30 animate-in slide-in-from-top-2 duration-200">
-                  <div className="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm w-full">
-                    <Shield size={14} className="text-emerald-500 shrink-0" />
-                    <span className="text-[13px] font-black text-slate-700 break-all leading-tight">{record.accountName}</span>
+                  <div className="flex items-center justify-between gap-2 bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm w-full">
+                    <div className="flex items-center gap-2 overflow-hidden flex-1">
+                      <Shield size={14} className="text-emerald-500 shrink-0" />
+                      <span className="text-[13px] font-black text-slate-700 break-all leading-tight">
+                        {!shouldMaskByDefault || revealedAccountId === record.id ? record.accountName : '******'}
+                      </span>
+                    </div>
+                    {shouldMaskByDefault && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRevealedAccountId(revealedAccountId === record.id ? null : record.id);
+                        }}
+                        className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors shrink-0"
+                      >
+                        {revealedAccountId === record.id ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    )}
                   </div>
                   {record.note && (
                     <div className="mt-2 text-[11px] text-slate-500 font-medium px-1 italic">

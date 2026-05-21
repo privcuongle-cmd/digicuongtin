@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, Plus, UserPlus, UserCircle, CheckCircle, Check, X, Trash2, Printer, Barcode, ChevronDown, Edit3, PieChart, ShoppingCart, Tag, Image as ImageIcon, ArrowLeft, Info, FileText, Wallet } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Product, InvoiceItem, Customer, CashTransaction } from '../types';
-import { formatNumber, parseFormattedNumber, formatDateTime, parseDateString } from '../lib/utils';
+import { formatNumber, parseFormattedNumber, formatDateTime, parseDateString, smartParseDate } from '../lib/utils';
 import { generateId } from '../lib/idUtils';
 import { NumericFormat } from 'react-number-format';
 import { PrintTemplate } from '../components/PrintTemplate';
@@ -46,14 +46,21 @@ export const POS: React.FC = () => {
 
       const customer = customers.find(c => c.name === editInvoice.customer);
 
-      // Parse invoice date to datetime-local format if possible
+      // Parse invoice date to datetime-local format using robust smartParseDate
       let invoiceDate = defaultDate;
       try {
-        // format is "12:32:02 22/4/2026" or similar
-        const [time, datePart] = editInvoice.date.split(' ');
-        const [d, m, y] = datePart.split('/');
-        invoiceDate = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}T${time.substring(0, 5)}`;
-      } catch (e) {}
+        const parsed = smartParseDate(editInvoice.date);
+        if (parsed && !isNaN(parsed.getTime()) && parsed.getTime() !== 0) {
+          const yyyy = parsed.getFullYear();
+          const mo = String(parsed.getMonth() + 1).padStart(2, '0');
+          const dd = String(parsed.getDate()).padStart(2, '0');
+          const hh = String(parsed.getHours()).padStart(2, '0');
+          const mm = String(parsed.getMinutes()).padStart(2, '0');
+          invoiceDate = `${yyyy}-${mo}-${dd}T${hh}:${mm}`;
+        }
+      } catch (e) {
+        console.error("Error parsing editInvoice date in state constructor", e);
+      }
 
       return [{
         id: Date.now(),
@@ -110,6 +117,80 @@ export const POS: React.FC = () => {
   const updateCurrentTab = (updates: Partial<typeof currentTab>) => {
     setTabs(prev => prev.map((t, i) => i === activeTab ? { ...t, ...updates } : t));
   };
+
+  // Handle Edit Invoice navigation when POS is already mounted
+  useEffect(() => {
+    const editInvoice = location.state?.editInvoice;
+    if (editInvoice && products.length > 0) {
+      // Find if we already have a tab style editing this invoice
+      const existingTabIdx = tabs.findIndex(t => t.editingInvoiceId === editInvoice.id);
+      
+      if (existingTabIdx !== -1) {
+        // Tab already exists, switch to it!
+        setActiveTab(existingTabIdx);
+      } else {
+        // Map cart items
+        const cartItems = editInvoice.items.map((item: any) => {
+          const prod = products.find(p => p.id === item.id);
+          return {
+            ...prod,
+            id: item.id,
+            name: item.name,
+            price: item.price,
+            qty: item.qty,
+            sn: item.sn || '',
+            serials: item.sn ? (typeof item.sn === 'string' ? item.sn.split(',').map((s: string) => s.trim()) : item.sn) : []
+          };
+        });
+
+        const customer = customers.find(c => c.name === editInvoice.customer);
+
+        // Parse invoice date to datetime-local format using robust smartParseDate
+        const now = new Date();
+        const defaultDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        let invoiceDate = defaultDate;
+        
+        try {
+          const parsed = smartParseDate(editInvoice.date);
+          if (parsed && !isNaN(parsed.getTime()) && parsed.getTime() !== 0) {
+            const yyyy = parsed.getFullYear();
+            const mo = String(parsed.getMonth() + 1).padStart(2, '0');
+            const dd = String(parsed.getDate()).padStart(2, '0');
+            const hh = String(parsed.getHours()).padStart(2, '0');
+            const mm = String(parsed.getMinutes()).padStart(2, '0');
+            invoiceDate = `${yyyy}-${mo}-${dd}T${hh}:${mm}`;
+          }
+        } catch (e) {
+          console.error("Error parsing invoice date during route update flow", e);
+        }
+
+        const newTab = {
+          id: Date.now(),
+          name: `Sửa ${editInvoice.id}`,
+          cart: cartItems,
+          discount: editInvoice.discount || 0,
+          paid: editInvoice.paid.toString(),
+          selectedCustomer: customer || { id: 'temp', name: editInvoice.customer, phone: editInvoice.phone || '' },
+          note: editInvoice.note || '',
+          paymentMethod: 'CASH' as const,
+          date: invoiceDate,
+          editingInvoiceId: editInvoice.id
+        };
+
+        const isOnlyEmptyTab = tabs.length === 1 && tabs[0].cart.length === 0 && !tabs[0].editingInvoiceId;
+        if (isOnlyEmptyTab) {
+          setTabs([newTab]);
+          setActiveTab(0);
+        } else {
+          setTabs(prev => [...prev, newTab]);
+          setActiveTab(tabs.length);
+        }
+      }
+
+      // Clear the router state to avoid reprocessing
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.state, products, customers, navigate, location.pathname, tabs]);
 
   // Handle URL params for pre-filling customer
   useEffect(() => {
@@ -638,7 +719,7 @@ return (
                   const defaultDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
                   setTabs([{ 
                     id: 1, 
-                    name: 'Hóa đơn 1',
+                    name: generateId('HDN', invoices),
                     cart: [],
                     discount: 0,
                     paid: '',

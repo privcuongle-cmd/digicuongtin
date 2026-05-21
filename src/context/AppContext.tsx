@@ -241,6 +241,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         })) : [];
 
         const extractItems = (record: any, details: any[], parentIdKeys: string[], snAsString: boolean = false) => {
+          // 1. Ưu tiên kiểm tra và xử lý dữ liệu từ cột JSON 'items'/'chitiet' trong bảng cha trước
+          // Đây là nguồn dữ liệu nguyên tử, luôn cam kết đầy đủ sản phẩm, số lượng, SN và giá bán từ lúc thanh toán
+          const itemsKey = Object.keys(record).find(k => k.toLowerCase().includes('item') || k.toLowerCase().includes('chitiet'));
+          if (itemsKey && record[itemsKey] && record[itemsKey] !== '') {
+            try {
+              const parsed = typeof record[itemsKey] === 'string' ? JSON.parse(record[itemsKey]) : record[itemsKey];
+              const itemsArray = Array.isArray(parsed) ? parsed : [];
+              
+              if (itemsArray.length > 0) {
+                return itemsArray.map((item: any) => {
+                  const prodId = String(item.id || item.productId || item.productID || '');
+                  const product = mappedProducts.find((p: any) => p.id === prodId);
+                  const snArray = parseSnFromDb(item.sn || item.serials || []);
+                  
+                  return {
+                    ...item,
+                    id: prodId,
+                    name: item.name || product?.name || 'Sản phẩm',
+                    price: parseFormattedNumber(item.price || 0),
+                    qty: Number(item.qty || item.quantity || item.quan || item.Quan || 0),
+                    sn: snAsString ? (Array.isArray(snArray) ? snArray.join(', ') : String(snArray || '')) : (Array.isArray(snArray) ? snArray : (typeof snArray === 'string' ? snArray.split(',').map(s => s.trim()).filter(Boolean) : [])),
+                    importPriceTotal: parseFormattedNumber(item.importPriceTotal || (product?.importPrice || 0) * (item.qty || 1))
+                  };
+                });
+              }
+            } catch (e) {
+              console.error('Parse items error, falling back to separate details list', e);
+            }
+          }
+
+          // 2. Dự phòng: Nếu không có hoặc lỗi cột JSON, lấy từ bảng chi tiết phụ (InvoiceDetails / ImportDetails)
           const recordId = String(record.id || '');
           const matchingDetails = details.filter((d: any) => {
             const parentId = parentIdKeys.map(k => d[k]).find(v => v !== undefined);
@@ -269,32 +300,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             });
           }
 
-          const itemsKey = Object.keys(record).find(k => k.toLowerCase().includes('item') || k.toLowerCase().includes('chitiet'));
-          if (itemsKey && record[itemsKey] && record[itemsKey] !== '') {
-            try {
-              const parsed = typeof record[itemsKey] === 'string' ? JSON.parse(record[itemsKey]) : record[itemsKey];
-              const itemsArray = Array.isArray(parsed) ? parsed : [];
-              
-              // Normalize items from JSON to ensure consistency
-              return itemsArray.map((item: any) => {
-                const prodId = String(item.id || item.productId || item.productID || '');
-                const product = mappedProducts.find((p: any) => p.id === prodId);
-                const snArray = parseSnFromDb(item.sn || item.serials || []);
-                
-                return {
-                  ...item,
-                  id: prodId,
-                  name: item.name || product?.name || 'Sản phẩm',
-                  price: parseFormattedNumber(item.price || 0),
-                  qty: Number(item.qty || item.quantity || item.quan || item.Quan || 0),
-                  sn: snAsString ? (Array.isArray(snArray) ? snArray.join(', ') : String(snArray || '')) : (Array.isArray(snArray) ? snArray : (typeof snArray === 'string' ? snArray.split(',').map(s => s.trim()).filter(Boolean) : [])),
-                  importPriceTotal: parseFormattedNumber(item.importPriceTotal || (product?.importPrice || 0) * (item.qty || 1))
-                };
-              });
-            } catch (e) {
-              console.error('Parse items error', e);
-            }
-          }
           return [];
         };
 

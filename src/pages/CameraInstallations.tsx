@@ -64,7 +64,7 @@ export const CameraInstallations: React.FC = () => {
       const dateB = parseDateString(b.installationDate);
       if (dateB !== dateA) return dateB - dateA;
       // Tiebreaker: newer ID (monotonic) first
-      return b.id.localeCompare(a.id);
+      return String(b.id || '').localeCompare(String(a.id || ''));
     });
   }, [cameraInstallations, searchTerm]);
 

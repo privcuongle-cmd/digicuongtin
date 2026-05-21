@@ -34,6 +34,7 @@ import { CameraManagement } from './pages/CameraManagement';
 import { CameraInstallations } from './pages/CameraInstallations';
 import { WalletManagement } from './pages/WalletManagement';
 import { ImageGallery } from './pages/ImageGallery';
+import { ShopSettings } from './pages/ShopSettings';
 import { requestNotificationPermission } from './lib/notification';
 
 import { ExternalSerials } from './pages/ExternalSerials';
@@ -88,6 +89,7 @@ const AppRoutes = () => {
           <Route path="tasks" element={<Tasks />} />
           <Route path="price-settings" element={<PriceSettings />} />
           <Route path="print-settings" element={<PrintSettings />} />
+          <Route path="shop-settings" element={<ShopSettings />} />
           <Route path="telegram-settings" element={<TelegramSettings />} />
           <Route path="image-gallery" element={<ImageGallery />} />
           <Route path="users" element={<Users />} />

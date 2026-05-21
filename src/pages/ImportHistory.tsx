@@ -26,6 +26,105 @@ import { PrintTemplate } from "../components/PrintTemplate";
 import { useScrollLock } from "../hooks/useScrollLock";
 import { useMobileBackModal } from "../hooks/useMobileBackModal";
 
+const getDateRange = (filterType: string, customStart?: string, customEnd?: string) => {
+  const now = new Date();
+  let start = new Date();
+  let end = new Date();
+
+  switch (filterType) {
+    case 'today':
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      break;
+    case 'yesterday':
+      start.setDate(now.getDate() - 1);
+      start.setHours(0, 0, 0, 0);
+      end.setDate(now.getDate() - 1);
+      end.setHours(23, 59, 59, 999);
+      break;
+    case 'this_week': {
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      start.setDate(diff);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      break;
+    }
+    case 'last_week': {
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1) - 7;
+      start.setDate(diff);
+      start.setHours(0, 0, 0, 0);
+      end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      end.setHours(23, 59, 59, 999);
+      break;
+    }
+    case 'this_month':
+      start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      break;
+    case 'last_month':
+      start = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+      end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      break;
+    case 'this_quarter': {
+      const quarter = Math.floor(now.getMonth() / 3);
+      start = new Date(now.getFullYear(), quarter * 3, 1, 0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      break;
+    }
+    case 'last_quarter': {
+      const quarter = Math.floor(now.getMonth() / 3) - 1;
+      const yr = quarter < 0 ? now.getFullYear() - 1 : now.getFullYear();
+      const q = quarter < 0 ? 3 : quarter;
+      start = new Date(yr, q * 3, 1, 0, 0, 0, 0);
+      end = new Date(yr, (q + 1) * 3, 0, 23, 59, 59, 999);
+      break;
+    }
+    case 'this_year':
+      start = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      break;
+    case 'last_year':
+      start = new Date(now.getFullYear() - 1, 0, 1, 0, 0, 0, 0);
+      end = new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59, 999);
+      break;
+    case 'custom':
+      if (customStart) {
+        start = new Date(customStart);
+        start.setHours(0, 0, 0, 0);
+      } else {
+        start = new Date(0);
+      }
+      if (customEnd) {
+        end = new Date(customEnd);
+        end.setHours(23, 59, 59, 999);
+      } else {
+        end = new Date();
+      }
+      break;
+    default:
+      return null;
+  }
+  return { start, end };
+};
+
+const filterNames: Record<string, string> = {
+  all: 'Toàn thời gian',
+  today: 'Hôm nay',
+  yesterday: 'Hôm qua',
+  this_week: 'Tuần này',
+  last_week: 'Tuần trước',
+  this_month: 'Tháng này',
+  last_month: 'Tháng trước',
+  this_quarter: 'Quý này',
+  last_quarter: 'Quý trước',
+  this_year: 'Năm này',
+  last_year: 'Năm trước',
+  custom: 'Tùy chỉnh'
+};
+
 export const ImportHistory: React.FC = () => {
   const {
     importOrders,
@@ -45,6 +144,13 @@ export const ImportHistory: React.FC = () => {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentWalletId, setPaymentWalletId] = useState<string>("");
+
+  // Time range filtering states
+  const [timeFilter, setTimeFilter] = useState<string>('all');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
+  const [isTimeDropdownOpen, setIsTimeDropdownOpen] = useState(false);
+  const [radioOption, setRadioOption] = useState<'preset' | 'custom'>('preset');
 
   // Use scroll lock for modals
   useScrollLock(!!selectedOrder || isPaymentModalOpen);
@@ -175,12 +281,22 @@ export const ImportHistory: React.FC = () => {
       (order.id || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
       (order.supplier || "").toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDebt = showDebtOnly ? order.debt > 0 : true;
-    return matchesSearch && matchesDebt;
+    
+    let matchesTime = true;
+    if (timeFilter !== 'all') {
+      const range = getDateRange(timeFilter, customStartDate, customEndDate);
+      if (range) {
+        const orderTime = parseDateString(order.date);
+        matchesTime = orderTime >= range.start.getTime() && orderTime <= range.end.getTime();
+      }
+    }
+
+    return matchesSearch && matchesDebt && matchesTime;
   });
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, rowsPerPage, showDebtOnly]);
+  }, [searchTerm, rowsPerPage, showDebtOnly, timeFilter, customStartDate, customEndDate]);
 
   const totalPages = Math.ceil(filteredOrders.length / rowsPerPage);
   const startIndex = (currentPage - 1) * rowsPerPage;
@@ -197,8 +313,8 @@ export const ImportHistory: React.FC = () => {
     <div className="flex flex-col h-full bg-slate-50 md:bg-white">
       <div className="bg-white md:rounded-xl md:shadow-sm md:border md:border-slate-200 flex flex-col mx-auto w-full h-full overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row gap-4 justify-between items-center bg-white md:bg-slate-50/50 shrink-0">
-          <div className="relative w-full md:max-w-md flex gap-2">
-            <div className="relative flex-1">
+          <div className="relative w-full md:max-w-2xl flex flex-wrap md:flex-nowrap gap-2 items-center">
+            <div className="relative flex-1 min-w-[180px]">
               <Search
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                 size={16}
@@ -227,6 +343,312 @@ export const ImportHistory: React.FC = () => {
                 </span>
               )}
             </button>
+
+            {/* Thời gian Filter Button and Popover */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsTimeDropdownOpen(!isTimeDropdownOpen)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all text-xs font-bold whitespace-nowrap ${
+                  timeFilter !== 'all'
+                    ? 'bg-blue-600 border-blue-600 text-white shadow-md'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm'
+                }`}
+              >
+                <Calendar size={14} />
+                <span>{timeFilter === 'all' ? 'Thời gian' : filterNames[timeFilter]}</span>
+                {timeFilter === 'custom' && customStartDate && customEndDate && (
+                  <span className="text-[10px] opacity-90 font-medium">
+                    ({customStartDate.split('-').reverse().join('/')} - {customEndDate.split('-').reverse().join('/')})
+                  </span>
+                )}
+              </button>
+
+              {isTimeDropdownOpen && (
+                <>
+                  {/* Backdrop overlay to close when clicking outside */}
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsTimeDropdownOpen(false)}
+                  />
+
+                  {/* Dropdown Card */}
+                  <div className="absolute left-0 sm:left-auto md:left-0 mt-2 z-50 bg-white border border-slate-200 rounded-2xl shadow-2xl flex flex-col md:flex-row p-4 gap-6 w-[280px] md:w-[780px] max-w-[95vw] animate-in fade-in slide-in-from-top-2 duration-150">
+                    
+                    {/* Left Sidebar Selection */}
+                    <div className="flex flex-col gap-4 md:w-[220px] shrink-0 border-b md:border-b-0 md:border-r border-slate-100 pb-4 md:pb-0 md:pr-4">
+                      <div className="text-slate-500 font-bold text-xs uppercase tracking-wider">
+                        Thời gian
+                      </div>
+                      
+                      {/* Presets option */}
+                      <label 
+                        className={`flex items-center gap-3 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                          radioOption === 'preset'
+                            ? 'border-blue-500 bg-blue-50/50 text-blue-700'
+                            : 'border-slate-200 hover:bg-slate-50 text-slate-600'
+                        }`}
+                        onClick={() => {
+                          setRadioOption('preset');
+                          if (timeFilter === 'custom') {
+                            setTimeFilter('this_month');
+                          }
+                        }}
+                      >
+                        <input
+                          type="radio"
+                          name="timeSelectionMode"
+                          checked={radioOption === 'preset'}
+                          onChange={() => {}}
+                          className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold">Theo thời gian</p>
+                          <p className="text-[11px] opacity-80 font-medium truncate">
+                            {timeFilter === 'custom' ? 'Tháng này' : filterNames[timeFilter]}
+                          </p>
+                        </div>
+                        <ChevronRight size={14} className="text-slate-400 shrink-0" />
+                      </label>
+
+                      {/* Custom option */}
+                      <div 
+                        className={`flex flex-col gap-2 p-2.5 rounded-xl border transition-all ${
+                          radioOption === 'custom'
+                            ? 'border-blue-500 bg-blue-50/50 text-blue-700'
+                            : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                        onClick={() => {
+                          setRadioOption('custom');
+                          setTimeFilter('custom');
+                        }}
+                      >
+                        <label className="flex items-center gap-3 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="timeSelectionMode"
+                            checked={radioOption === 'custom'}
+                            onChange={() => {}}
+                            className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                          />
+                          <div className="flex-1">
+                            <p className="text-xs font-bold">Tùy chỉnh</p>
+                          </div>
+                          <Calendar size={14} className="text-slate-400 shrink-0" />
+                        </label>
+                        
+                        {radioOption === 'custom' && (
+                          <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-blue-100" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">Từ ngày</span>
+                              <input
+                                type="date"
+                                value={customStartDate}
+                                onChange={(e) => setCustomStartDate(e.target.value)}
+                                className="w-full px-2 py-1 border border-slate-200 rounded text-xs outline-none focus:border-blue-500 font-medium"
+                              />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">Đến ngày</span>
+                              <input
+                                type="date"
+                                value={customEndDate}
+                                onChange={(e) => setCustomEndDate(e.target.value)}
+                                className="w-full px-2 py-1 border border-slate-200 rounded text-xs outline-none focus:border-blue-500 font-medium"
+                              />
+                            </div>
+                            {/* Clear option */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTimeFilter('all');
+                                setRadioOption('preset');
+                                setCustomStartDate('');
+                                setCustomEndDate('');
+                                setIsTimeDropdownOpen(false);
+                              }}
+                              className="text-center text-[10px] text-red-500 hover:text-red-700 font-bold uppercase mt-1 tracking-wider"
+                            >
+                              Xóa bộ lọc
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right Grid presets */}
+                    <div className={`flex-1 grid grid-cols-2 md:grid-cols-5 gap-3 ${radioOption !== 'preset' ? 'opacity-40 pointer-events-none' : ''}`}>
+                      
+                      {/* Theo ngày */}
+                      <div className="flex flex-col gap-2">
+                        <span className="text-slate-400 font-bold text-[11px] uppercase tracking-wider whitespace-nowrap">Theo ngày</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTimeFilter('today');
+                            setIsTimeDropdownOpen(false);
+                          }}
+                          className={`${
+                            timeFilter === 'today'
+                              ? 'bg-blue-600 text-white font-bold border-blue-600 shadow-sm shadow-blue-100'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                          } text-xs px-2.5 py-2 border rounded-full text-center transition-all whitespace-nowrap w-full`}
+                        >
+                          Hôm nay
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTimeFilter('yesterday');
+                            setIsTimeDropdownOpen(false);
+                          }}
+                          className={`${
+                            timeFilter === 'yesterday'
+                              ? 'bg-blue-600 text-white font-bold border-blue-600 shadow-sm shadow-blue-100'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                          } text-xs px-2.5 py-2 border rounded-full text-center transition-all whitespace-nowrap w-full`}
+                        >
+                          Hôm qua
+                        </button>
+                      </div>
+
+                      {/* Theo tuần */}
+                      <div className="flex flex-col gap-2">
+                        <span className="text-slate-400 font-bold text-[11px] uppercase tracking-wider whitespace-nowrap">Theo tuần</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTimeFilter('this_week');
+                            setIsTimeDropdownOpen(false);
+                          }}
+                          className={`${
+                            timeFilter === 'this_week'
+                              ? 'bg-blue-600 text-white font-bold border-blue-600 shadow-sm shadow-blue-100'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                          } text-xs px-2.5 py-2 border rounded-full text-center transition-all whitespace-nowrap w-full`}
+                        >
+                          Tuần này
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTimeFilter('last_week');
+                            setIsTimeDropdownOpen(false);
+                          }}
+                          className={`${
+                            timeFilter === 'last_week'
+                              ? 'bg-blue-600 text-white font-bold border-blue-600 shadow-sm shadow-blue-100'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                          } text-xs px-2.5 py-2 border rounded-full text-center transition-all whitespace-nowrap w-full`}
+                        >
+                          Tuần trước
+                        </button>
+                      </div>
+
+                      {/* Theo tháng */}
+                      <div className="flex flex-col gap-2">
+                        <span className="text-slate-400 font-bold text-[11px] uppercase tracking-wider whitespace-nowrap">Theo tháng</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTimeFilter('this_month');
+                            setIsTimeDropdownOpen(false);
+                          }}
+                          className={`${
+                            timeFilter === 'this_month'
+                              ? 'bg-blue-600 text-white font-bold border-blue-600 shadow-sm shadow-blue-100'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                          } text-xs px-2.5 py-2 border rounded-full text-center transition-all whitespace-nowrap w-full`}
+                        >
+                          Tháng này
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTimeFilter('last_month');
+                            setIsTimeDropdownOpen(false);
+                          }}
+                          className={`${
+                            timeFilter === 'last_month'
+                              ? 'bg-blue-600 text-white font-bold border-blue-600 shadow-sm shadow-blue-100'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                          } text-xs px-2.5 py-2 border rounded-full text-center transition-all whitespace-nowrap w-full`}
+                        >
+                          Tháng trước
+                        </button>
+                      </div>
+
+                      {/* Theo quý */}
+                      <div className="flex flex-col gap-2">
+                        <span className="text-slate-400 font-bold text-[11px] uppercase tracking-wider whitespace-nowrap">Theo quý</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTimeFilter('this_quarter');
+                            setIsTimeDropdownOpen(false);
+                          }}
+                          className={`${
+                            timeFilter === 'this_quarter'
+                              ? 'bg-blue-600 text-white font-bold border-blue-600 shadow-sm shadow-blue-100'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                          } text-xs px-2.5 py-2 border rounded-full text-center transition-all whitespace-nowrap w-full`}
+                        >
+                          Quý này
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTimeFilter('last_quarter');
+                            setIsTimeDropdownOpen(false);
+                          }}
+                          className={`${
+                            timeFilter === 'last_quarter'
+                              ? 'bg-blue-600 text-white font-bold border-blue-600 shadow-sm shadow-blue-100'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                          } text-xs px-2.5 py-2 border rounded-full text-center transition-all whitespace-nowrap w-full`}
+                        >
+                          Quý trước
+                        </button>
+                      </div>
+
+                      {/* Theo năm */}
+                      <div className="flex flex-col gap-2">
+                        <span className="text-slate-400 font-bold text-[11px] uppercase tracking-wider whitespace-nowrap">Theo năm</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTimeFilter('this_year');
+                            setIsTimeDropdownOpen(false);
+                          }}
+                          className={`${
+                            timeFilter === 'this_year'
+                              ? 'bg-blue-600 text-white font-bold border-blue-600 shadow-sm shadow-blue-100'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                          } text-xs px-2.5 py-2 border rounded-full text-center transition-all whitespace-nowrap w-full`}
+                        >
+                          Năm này
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTimeFilter('last_year');
+                            setIsTimeDropdownOpen(false);
+                          }}
+                          className={`${
+                            timeFilter === 'last_year'
+                              ? 'bg-blue-600 text-white font-bold border-blue-600 shadow-sm shadow-blue-100'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                          } text-xs px-2.5 py-2 border rounded-full text-center transition-all whitespace-nowrap w-full`}
+                        >
+                          Năm trước
+                        </button>
+                      </div>
+
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
           <div className="hidden md:flex gap-2">
             <Link

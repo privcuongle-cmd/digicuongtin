@@ -47,7 +47,7 @@ export const Suppliers: React.FC = () => {
   const filteredSuppliers = (suppliers || []).filter(s => 
     (s.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
     (s.phone || '').includes(searchTerm)
-  ).sort((a, b) => (b.id || '').localeCompare(a.id || ''));
+  ).sort((a, b) => String(b.id || '').localeCompare(String(a.id || '')));
 
   useEffect(() => {
     setCurrentPage(1);

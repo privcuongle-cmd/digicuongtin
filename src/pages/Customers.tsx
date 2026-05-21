@@ -134,7 +134,7 @@ export const Customers: React.FC = () => {
       (c.address || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (c.location || '').toLowerCase().includes(searchTerm.toLowerCase())
     )
-    .sort((a, b) => (b.id || '').localeCompare(a.id || ''));
+    .sort((a, b) => String(b.id || '').localeCompare(String(a.id || '')));
 
   const totalItems = filteredCustomers.length;
   const totalPages = Math.ceil(totalItems / rowsPerPage);

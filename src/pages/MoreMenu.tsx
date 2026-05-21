@@ -107,7 +107,7 @@ export const MoreMenu: React.FC = () => {
       </div>
 
       {/* Store Info Link */}
-      <Link to="#" className="bg-white px-4 py-4 mb-4 flex items-center justify-between shadow-sm active:bg-slate-50">
+      <Link to="/shop-settings" className="bg-white px-4 py-4 mb-4 flex items-center justify-between shadow-sm active:bg-slate-50">
         <span className="font-bold text-slate-700">Thông tin cửa hàng</span>
         <ChevronRight size={18} className="text-slate-300" />
       </Link>

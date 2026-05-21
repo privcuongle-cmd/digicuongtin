@@ -52,6 +52,7 @@ export const Layout: React.FC = () => {
     if (currentPath === '/serials') return 'Quản lý Serial';
     if (currentPath === '/users') return 'Người dùng';
     if (currentPath === '/print-settings') return 'Cài đặt bản in';
+    if (currentPath === '/shop-settings') return 'Thông tin cửa hàng';
     if (currentPath === '/tasks') return 'Quản lý công việc';
     if (currentPath === '/external-serials') return 'External Serial';
     if (currentPath === '/wallets') return 'Quản lý Ví';
@@ -169,6 +170,7 @@ export const Layout: React.FC = () => {
       sections: [
         {
           items: [
+            { label: 'Thông tin cửa hàng', path: '/shop-settings', icon: <Store size={14} /> },
             { label: 'Thư viện ảnh', path: '/image-gallery', icon: <ImageIcon size={14} /> },
             { label: 'Quản lý người dùng', path: '/users', icon: <Users size={14} /> },
             { label: 'Cài đặt bản in', path: '/print-settings', icon: <Printer size={14} /> },

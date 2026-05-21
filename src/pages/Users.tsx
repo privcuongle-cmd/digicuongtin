@@ -24,7 +24,7 @@ const Users: React.FC = () => {
   const filteredUsers = users.filter(u => 
     u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.name.toLowerCase().includes(searchTerm.toLowerCase())
-  ).sort((a, b) => b.id.localeCompare(a.id));
+  ).sort((a, b) => String(b.id || '').localeCompare(String(a.id || '')));
 
   const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE);
   const paginatedUsers = filteredUsers.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
