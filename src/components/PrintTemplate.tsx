@@ -1,6 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { formatNumber, formatDateTime } from '../lib/utils';
+import { formatNumber, formatDateTime, smartParseDate } from '../lib/utils';
 import { useAppContext } from '../context/AppContext';
 import { numberToWordsVN } from '../lib/numberToWords';
 
@@ -34,66 +34,68 @@ export const PrintTemplate: React.FC<PrintTemplateProps> = ({
 
   const formattedDate = formatDateTime(date);
 
+  const parsedDateObj = smartParseDate(date);
+  const formattedDay = parsedDateObj.getTime() > 0 ? parsedDateObj.getDate().toString().padStart(2, '0') : '';
+  const formattedMonth = parsedDateObj.getTime() > 0 ? (parsedDateObj.getMonth() + 1).toString().padStart(2, '0') : '';
+  const formattedYear = parsedDateObj.getTime() > 0 ? parsedDateObj.getFullYear().toString() : '';
+
   const content = (
-    <div id="print-section" className="fixed top-0 left-0 w-full min-h-screen bg-white text-slate-900 font-sans z-[999999] opacity-0 pointer-events-none print:relative print:opacity-100 print:z-auto print:pointer-events-auto p-4 md:p-6 shadow-inner text-xs md:text-sm leading-normal">
+    <div id="print-section" className="fixed top-0 left-0 w-full min-h-screen bg-white text-slate-900 font-sans z-[999999] opacity-0 pointer-events-none print:relative print:opacity-100 print:z-auto print:pointer-events-auto p-4 md:p-6 shadow-inner text-sm leading-normal">
       {/* Decorative background removed for cleaner printing */}
       
       {/* Header with Store Info */}
-      <div className="flex justify-between items-start mb-3 pb-2 border-b-2 border-slate-800">
-        <div className="flex gap-3 items-center">
+      <div className="flex justify-between items-start mb-4 pb-3 border-b border-slate-300">
+        <div className="flex gap-4 items-center">
           {shopLogo && (
-            <div className="w-16 h-16 shrink-0 bg-white flex items-center justify-center overflow-hidden">
+            <div className="w-20 h-20 shrink-0 bg-white flex items-center justify-center overflow-hidden">
               <img src={shopLogo} alt="Store Logo" referrerPolicy="no-referrer" className="max-w-full max-h-full object-contain" />
             </div>
           )}
-          <div className="space-y-0.5">
-            <h1 className="font-semibold text-lg md:text-xl text-slate-900 uppercase tracking-wide mb-0.5">{printSettings.storeName}</h1>
-            <p className="flex items-center gap-1 font-normal text-xs md:text-sm text-slate-800">
+          <div className="space-y-0.5 text-xs md:text-sm">
+            <h1 className="font-bold text-sm md:text-base text-slate-900 uppercase tracking-wide mb-0.5">{printSettings.storeName}</h1>
+            <p className="flex items-center gap-1 font-normal text-slate-850">
               <span className="text-slate-500 font-normal">Đ/c:</span> {printSettings.address}
             </p>
-            <p className="flex items-center gap-1 font-normal text-xs md:text-sm text-slate-800">
+            <p className="flex items-center gap-1 font-normal text-slate-850">
               <span className="text-slate-500 font-normal">ĐT:</span> {printSettings.phone}
               <span className="mx-1.5 text-slate-300">|</span>
               <span className="text-slate-500 font-normal">Email:</span> {printSettings.email}
             </p>
-            <p className="flex items-center gap-1 font-normal text-xs md:text-sm text-slate-800">
-              <span className="text-slate-500 font-normal">NH:</span> {printSettings.bankInfo}
-            </p>
+            {printSettings.bankInfo && (
+              <p className="flex items-center gap-1 font-normal text-slate-850">
+                <span className="text-slate-500 font-normal">NH:</span> {printSettings.bankInfo}
+              </p>
+            )}
           </div>
-        </div>
-        <div className="text-right flex flex-col items-end">
-          <div className="px-3 py-1 bg-slate-100 rounded border border-slate-200 mb-1">
-             <span className="text-[10px] block text-slate-500 uppercase tracking-wider font-semibold">Số hóa đơn</span>
-             <span className="text-sm font-medium font-mono text-slate-900">{id}</span>
-          </div>
-          <p className="text-xs text-slate-600 italic">
-            Ngày: {formattedDate}
-          </p>
         </div>
       </div>
 
-      {/* Invoice Title */}
-      <div className="text-center mb-3">
-        <h2 className="text-xl md:text-2xl font-bold text-slate-900 uppercase tracking-wider">{title}</h2>
+      {/* Invoice Title Block centered */}
+      <div className="text-center mb-4">
+        <h2 className="text-lg md:text-xl font-bold text-slate-900 uppercase tracking-wider">{title}</h2>
+        <p className="text-sm font-medium font-mono text-slate-905 mt-0.5">Số hóa đơn: {id}</p>
+        <p className="text-sm text-slate-650 italic mt-0.5">Ngày {formattedDay} tháng {formattedMonth} năm {formattedYear}</p>
       </div>
 
       {/* Customer Info */}
-      <div className="mb-3 p-3 bg-white rounded-lg border border-slate-200 leading-normal text-xs md:text-sm">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-1.5 gap-x-4 text-slate-800">
-          <p className="flex items-baseline gap-2">
-            <span className="text-xs uppercase tracking-wider text-slate-500 font-medium shrink-0">{type === 'PHIEU_NHAP' ? 'Nhà cung cấp:' : 'Khách hàng:'}</span>
-            <span className="font-semibold text-slate-900 text-xs md:text-sm">{partner}</span>
-          </p>
-          {phone && phone !== '---' && phone.trim() !== '' && phone !== 'undefined' && phone !== 'null' && (
-            <p className="flex items-baseline gap-2">
-              <span className="text-xs uppercase tracking-wider text-slate-500 font-medium shrink-0">SĐT:</span>
-              <span className="font-semibold text-slate-900 text-xs md:text-sm">{phone}</span>
+      <div className="mb-4 py-1 leading-relaxed text-sm">
+        <div className="space-y-1 text-slate-900">
+          <div className="flex flex-wrap justify-between items-baseline gap-2">
+            <p>
+              <span className="text-slate-500 font-normal">{type === 'PHIEU_NHAP' ? 'Nhà cung cấp:' : 'Khách hàng:'} </span>
+              <span className="font-semibold text-slate-950 text-sm md:text-base">{partner}</span>
             </p>
-          )}
+            {phone && phone !== '---' && phone.trim() !== '' && phone !== 'undefined' && phone !== 'null' && (
+              <p>
+                <span className="text-slate-500 font-normal">SĐT: </span>
+                <span className="font-semibold text-slate-950 text-sm md:text-base">{phone}</span>
+              </p>
+            )}
+          </div>
           {address && address !== '---' && address.trim() !== '' && address !== 'undefined' && address !== 'null' && (
-            <p className="flex items-baseline gap-2 sm:col-span-2 border-t border-slate-105 pt-1.5 mt-0.5">
-              <span className="text-xs uppercase tracking-wider text-slate-500 font-medium shrink-0">Địa chỉ:</span>
-              <span className="text-slate-800 text-xs md:text-sm">{address}</span>
+            <p>
+              <span className="text-slate-500 font-normal">Địa chỉ: </span>
+              <span className="text-slate-800 text-sm md:text-base">{address}</span>
             </p>
           )}
         </div>
@@ -101,29 +103,27 @@ export const PrintTemplate: React.FC<PrintTemplateProps> = ({
 
       {/* Table */}
       {items && items.length > 0 && (
-        <div className="mb-3 rounded border border-slate-300 overflow-hidden">
-          <table className="w-full text-xs md:text-sm">
+        <div className="mb-4">
+          <table className="w-full text-sm border-collapse border border-slate-500">
             <thead>
-              <tr className="border-b border-slate-400 text-slate-800 bg-slate-50/50 text-left">
-                <th className="py-1 px-2 text-center font-semibold uppercase w-10">TT</th>
-                <th className="py-1 px-2 font-semibold uppercase">Tên mặt hàng / Quy cách</th>
-                <th className="py-1 px-2 text-center font-semibold uppercase w-16">ĐVT</th>
-                <th className="py-1 px-2 text-center font-semibold uppercase w-12">SL</th>
-                <th className="py-1 px-2 text-right font-semibold uppercase w-24 md:w-28">Đơn giá</th>
-                <th className="py-1 px-2 text-right font-semibold uppercase w-24 md:w-28">Thành tiền</th>
+              <tr className="bg-slate-100 text-slate-900 text-left font-bold border-b border-slate-500">
+                <th className="py-1 px-2 text-center border-r border-slate-500 w-10">STT</th>
+                <th className="py-1 px-2 border-r border-slate-500">Tên hàng</th>
+                <th className="py-1 px-2 text-center border-r border-slate-500 w-16">ĐVT</th>
+                <th className="py-1 px-2 text-center border-r border-slate-500 w-18">Số lượng</th>
+                <th className="py-1 px-2 text-right border-r border-slate-500 w-24 md:w-28">Đơn giá</th>
+                <th className="py-1 px-2 text-right w-24 md:w-32">Thành tiền</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody>
               {items.map((item, idx) => (
-                <tr key={`print-item-${item.name}-${idx}`} className="hover:bg-slate-50 transition-colors">
-                  <td className="py-1 px-2 text-center border-r border-slate-200 text-slate-600">{idx + 1}</td>
-                  <td className="py-1 px-2 border-r border-slate-200">
-                    <p className="font-normal text-slate-900 text-xs md:text-sm">{item.name}</p>
-                  </td>
-                  <td className="py-1 px-2 text-center border-r border-slate-200 text-slate-700">{item.unit || 'Cái'}</td>
-                  <td className="py-1 px-2 text-center border-r border-slate-200 font-medium text-slate-900">{item.qty}</td>
-                  <td className="py-1 px-2 text-right border-r border-slate-200 text-slate-700">{formatNumber(item.price)}</td>
-                  <td className="py-1 px-2 text-right font-medium text-slate-900">{formatNumber(item.total)}</td>
+                <tr key={`print-item-${item.name}-${idx}`} className="border-b border-slate-400 text-slate-900">
+                  <td className="py-1 px-2 text-center border-r border-slate-400">{idx + 1}</td>
+                  <td className="py-1 px-2 border-r border-slate-400">{item.name}</td>
+                  <td className="py-1 px-2 text-center border-r border-slate-400">{item.unit || 'Cái'}</td>
+                  <td className="py-1 px-2 text-center border-r border-slate-400">{item.qty}</td>
+                  <td className="py-1 px-2 text-right border-r border-slate-400">{formatNumber(item.price)}</td>
+                  <td className="py-1 px-2 text-right font-medium">{formatNumber(item.total)}</td>
                 </tr>
               ))}
             </tbody>
@@ -132,55 +132,63 @@ export const PrintTemplate: React.FC<PrintTemplateProps> = ({
       )}
 
       {/* Calculations section */}
-      <div className="flex justify-end mb-4 text-xs md:text-sm">
-        <div className="w-full sm:w-[360px] space-y-1.5 text-xs md:text-sm text-slate-800">
-          <div className="flex justify-between font-normal px-1">
-            <span>Cộng tiền hàng:</span>
-            <span>{formatNumber(items?.reduce((s, i) => s + i.total, 0) || total)}</span>
+      <div className="flex justify-end mb-4 text-sm">
+        <div className="w-full sm:w-[450px] space-y-1.5 text-slate-900">
+          <div className="flex justify-between items-center">
+            <span className="font-normal text-slate-700">Tổng cộng:</span>
+            <div className="flex w-36 justify-between items-baseline font-semibold">
+              <span className="text-center w-12">{items?.reduce((s, i) => s + i.qty, 0)}</span>
+              <span className="text-right flex-1">{formatNumber(items?.reduce((s, i) => s + i.total, 0) || total)}</span>
+            </div>
           </div>
           {discount !== undefined && discount > 0 && (
-            <div className="flex justify-between text-rose-600 font-normal px-1">
-              <span>Chiết khấu:</span>
-              <span>-{formatNumber(discount)}</span>
+            <div className="flex justify-between items-center text-rose-600">
+              <span className="font-normal">Chiết khấu hóa đơn:</span>
+              <span className="font-medium text-right w-24">{formatNumber(discount)}</span>
             </div>
           )}
-          <div className="flex justify-between items-center border-t border-b border-slate-300 py-1.5 text-slate-950 my-1">
-            <span className="font-semibold uppercase text-xs">Tổng cộng:</span>
-            <span className="text-sm md:text-base font-semibold">{formatNumber(total)}</span>
+          <div className="flex justify-between items-center border-t border-slate-300 py-1 font-bold text-slate-950">
+            <span>Tổng thanh toán:</span>
+            <span className="text-right w-24 font-bold">{formatNumber(total)}</span>
           </div>
           
-          <div className="mb-1 text-center text-[11px] md:text-xs text-slate-600 italic font-normal leading-normal">
-            (Bằng chữ: {numberToWordsVN(total)})
+          <div className="text-center text-xs text-slate-600 italic font-normal py-0.5">
+            (Tổng thanh toán bằng chữ: {numberToWordsVN(total)})
           </div>
           
-          <div className="p-2.5 space-y-1.5 bg-slate-50 rounded border border-slate-200 text-slate-800 text-xs md:text-sm">
-            <div className="flex justify-between font-normal">
-              <span>Nợ cũ:</span>
-              <span className="font-normal text-slate-900">{formatNumber(oldDebt)}</span>
+          <div className="pt-2 space-y-1.5 text-slate-850 border-t border-dashed border-slate-300">
+            <div className="flex justify-between items-center">
+              <span className="font-normal text-slate-700">
+                {type === 'PHIEU_NHAP' ? 'Đã thanh toán cho NCC:' : 'Khách hàng thanh toán:'}
+              </span>
+              <span className="font-medium text-right w-24">{formatNumber(paid)}</span>
             </div>
-            <div className="flex justify-between font-normal">
-              <span>Đã thanh toán:</span>
-              <span className="font-normal text-slate-900">{formatNumber(paid)}</span>
+            <div className="flex justify-between items-center">
+              <span className="font-normal text-slate-700">Nợ cũ:</span>
+              <span className="font-medium text-right w-24">{formatNumber(oldDebt)}</span>
             </div>
-            <div className="flex justify-between items-center border-t border-dashed border-slate-200 pt-1.5 mt-1">
-              <span className="font-medium uppercase text-[10px] md:text-xs text-slate-500">Nợ sau đơn:</span>
-              <span className="text-sm md:text-base font-semibold text-slate-900">{formatNumber(oldDebt + (total - paid))}</span>
+            <div className="flex justify-between items-center border-t border-slate-300 pt-1.5 font-bold text-slate-950">
+              <span className="font-semibold text-slate-850">
+                {type === 'PHIEU_NHAP' ? 'Nợ sau tạo phiếu nhập:' : 'Số nợ sau tạo hóa đơn:'}
+              </span>
+              <span className="text-right w-24 font-semibold">{formatNumber(oldDebt + (total - paid))}</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Signatures */}
-      <div className="grid grid-cols-2 gap-4 text-center mt-4 mb-8 px-6 text-xs md:text-sm">
+      <div className="grid grid-cols-2 gap-4 text-center mt-6 mb-10 px-6 text-sm">
         <div>
-          <h4 className="text-xs md:text-sm font-normal uppercase tracking-wider text-slate-700 mb-1">{type === 'PHIEU_NHAP' ? 'Người giao hàng' : 'Người mua hàng'}</h4>
-          <p className="text-[11px] italic text-slate-405 mb-10">(Ký và ghi rõ họ tên)</p>
-          <p className="font-medium text-slate-900 text-xs md:text-sm">{partner}</p>
+          <h4 className="font-bold uppercase text-slate-800 mb-1">{type === 'PHIEU_NHAP' ? 'Người giao hàng' : 'Người mua hàng'}</h4>
+          <p className="text-[11px] italic text-slate-400 mb-14">(Ký và ghi rõ họ tên)</p>
+          <p className="font-semibold text-slate-900">{partner}</p>
         </div>
-        <div>
-          <h4 className="text-xs md:text-sm font-normal uppercase tracking-wider text-slate-700 mb-1">{type === 'PHIEU_NHAP' ? 'Người nhận hàng' : 'Người bán hàng'}</h4>
-          <p className="text-[11px] italic text-slate-405 mb-10">(Ký và ghi rõ họ tên)</p>
-          <p className="font-medium text-slate-900 text-xs md:text-sm">{printSettings.storeName.replace('TIN HỌC ', '')}</p>
+        <div className="flex flex-col items-center">
+          <p className="text-slate-605 italic mb-1.5 text-xs self-end">Ngày {formattedDay} tháng {formattedMonth} năm {formattedYear}</p>
+          <h4 className="font-bold uppercase text-slate-800 mb-1">{type === 'PHIEU_NHAP' ? 'Người nhận hàng' : 'Người bán hàng'}</h4>
+          <p className="text-[11px] italic text-slate-400 mb-14">(Ký và ghi rõ họ tên)</p>
+          <p className="font-semibold text-slate-900">{printSettings.storeName.replace('TIN HỌC ', '')}</p>
         </div>
       </div>
 
