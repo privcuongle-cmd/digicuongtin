@@ -150,6 +150,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const [isLoading, setIsLoading] = useState(true);
 
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
   useEffect(() => {
     localStorage.setItem('cuongtin_erp_state', JSON.stringify(state));
   }, [state]);
@@ -912,18 +917,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const addInvoice = async (invoice: Invoice) => {
-    // Check if this is an update or a new invoice
-    const existingInvoice = state.invoices.find(inv => inv.id === invoice.id);
+    // Check if this is an update or a new invoice using the freshest stateRef to prevent duplicates
+    const currentInvoices = stateRef.current.invoices || [];
+    const existingInvoice = currentInvoices.find(inv => inv.id === invoice.id);
     const isUpdate = !!existingInvoice;
 
     // Find current customer to get old debt
-    const customer = state.customers.find(c => c.name === invoice.customer);
+    const customer = (stateRef.current.customers || []).find(c => c.name === invoice.customer);
     const oldDebt = customer?.debt || 0;
     const totalDebt = oldDebt + invoice.debt;
 
     const newInvoice = {
       ...invoice,
-      id: invoice.id || generateId('HDN', state.invoices || []),
+      id: invoice.id || generateId('HDN', currentInvoices),
       oldDebt: isUpdate ? (existingInvoice.oldDebt || 0) : oldDebt,
       totalDebt: isUpdate ? (existingInvoice.oldDebt || 0) + invoice.debt : totalDebt
     };
@@ -1026,7 +1032,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           taskId: newInvoice.taskId || '',
           paymentMethod: newInvoice.paymentMethod || 'CASH',
           walletId: newInvoice.walletId || '',
-          walletName: newInvoice.walletId ? state.wallets.find(w => w.id === newInvoice.walletId)?.name || '' : '',
+          walletName: newInvoice.walletId ? stateRef.current.wallets.find(w => w.id === newInvoice.walletId)?.name || '' : '',
           status: newInvoice.debt > 0 ? 'Còn nợ' : 'Hoàn tất',
           note: newInvoice.note || '',
           items: JSON.stringify(newInvoice.items)
@@ -1036,7 +1042,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           await apiService.updateRecord('Invoices', newInvoice.id, syncData);
           
           // Also update CashLedger/Wallet if they exist
-          const cashTx = state.cashTransactions.find(t => t.refId === newInvoice.id && t.category === 'SALES_REVENUE');
+          const cashTx = stateRef.current.cashTransactions.find(t => t.refId === newInvoice.id && t.category === 'SALES_REVENUE');
           if (cashTx) {
             await apiService.updateRecord('CashLedger', cashTx.id, { amount: newInvoice.paid });
           }
@@ -1093,7 +1099,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
 
             // Sync product stock to DB
-            const p = state.products.find(prod => prod.id === newItem.id);
+            const p = stateRef.current.products.find(prod => prod.id === newItem.id);
             if (p && !p.isService) {
               const adjustedStock = p.stock + (isUpdate && existingInvoice ? (existingInvoice.items.find(old => old.id === p.id)?.qty || 0) : 0) - newItem.qty;
               detailPromises.push(apiService.updateRecord('Products', newItem.id, { stock: adjustedStock }));
@@ -1104,7 +1110,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             detailPromises.push(apiService.deleteRecord('StockCards', scId));
             
             // Revert stock in DB for removed item
-            const p = state.products.find(prod => prod.id === oldItem.id);
+            const p = stateRef.current.products.find(prod => prod.id === oldItem.id);
             if (p && !p.isService) {
               detailPromises.push(apiService.updateRecord('Products', p.id, { stock: p.stock + oldItem.qty }));
             }
@@ -1122,7 +1128,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const updateInvoice = async (id: string, updates: Partial<Invoice>) => {
-    const currentInvoice = state.invoices?.find(inv => inv.id === id);
+    const currentInvoice = (stateRef.current.invoices || []).find(inv => inv.id === id);
     let calculatedDebt: number | undefined;
 
     if (currentInvoice) {
@@ -1161,7 +1167,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (updates.paymentMethod !== undefined) apiUpdates.paymentMethod = updates.paymentMethod;
     if (updates.walletId !== undefined) {
       apiUpdates.walletId = updates.walletId;
-      const walletObj = state.wallets.find(w => w.id === updates.walletId);
+      const walletObj = stateRef.current.wallets.find(w => w.id === updates.walletId);
       apiUpdates.walletName = walletObj ? walletObj.name : '';
     }
 
@@ -1229,12 +1235,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const addImportOrder = async (order: ImportOrder) => {
-    const existingOrder = state.importOrders?.find(o => o.id === order.id);
+    const currentImportOrders = stateRef.current.importOrders || [];
+    const existingOrder = currentImportOrders.find(o => o.id === order.id);
     const isUpdate = !!existingOrder;
 
     const newOrder = {
       ...order,
-      id: order.id || generateId('NHN', state.importOrders || [])
+      id: order.id || generateId('NHN', currentImportOrders)
     };
 
     const newStockCards: StockCard[] = newOrder.items.map((item, i) => ({
@@ -1291,7 +1298,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     
     (async () => {
       try {
-        const walletObj = state.wallets.find(w => w.id === newOrder.walletId);
+        const walletObj = stateRef.current.wallets.find(w => w.id === newOrder.walletId);
         
         const syncData = {
           id: newOrder.id,
@@ -1316,10 +1323,87 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (isUpdate) {
           await apiService.updateRecord('Imports', newOrder.id, syncData);
           
-          const cashTx = state.cashTransactions.find(t => t.refId === newOrder.id && t.category === 'IMPORT_PAYMENT');
+          const cashTx = stateRef.current.cashTransactions.find(t => t.refId === newOrder.id && t.category === 'IMPORT_PAYMENT');
           if (cashTx) {
             await apiService.updateRecord('CashLedger', cashTx.id, { amount: newOrder.paid, walletId: newOrder.walletId || '' });
           }
+
+          // Smart and Clean physical Serial table syncing on Import edit
+          const oldSerials: string[] = [];
+          existingOrder.items.forEach(item => {
+            const snVal = (item as any).sn;
+            if (snVal) {
+              if (Array.isArray(snVal)) {
+                oldSerials.push(...snVal);
+              } else if (typeof snVal === 'string') {
+                oldSerials.push(...snVal.split(',').map(s => s.trim()).filter(Boolean));
+              }
+            }
+          });
+
+          const newSerials: string[] = [];
+          newOrder.items.forEach(item => {
+            const snVal = (item as any).sn;
+            if (snVal) {
+              if (Array.isArray(snVal)) {
+                newSerials.push(...snVal);
+              } else if (typeof snVal === 'string') {
+                newSerials.push(...snVal.split(',').map(s => s.trim()).filter(Boolean));
+              }
+            }
+          });
+
+          const removedSerials = oldSerials.filter(s => !newSerials.includes(s));
+          for (const sn of removedSerials) {
+            await apiService.deleteRecord('Serials', sn);
+          }
+
+          const addedSerials = newSerials.filter(s => !oldSerials.includes(s));
+          for (const sn of addedSerials) {
+            const matchedItem = newOrder.items.find(item => {
+              const snVal = (item as any).sn;
+              if (Array.isArray(snVal)) return snVal.includes(sn);
+              if (typeof snVal === 'string') return snVal.split(',').map(x => x.trim()).includes(sn);
+              return false;
+            });
+            if (matchedItem) {
+              const formattedSn = formatSnForDb(sn);
+              await apiService.createRecord('Serials', {
+                prodId: matchedItem.id,
+                sn: formattedSn,
+                supplier: newOrder.supplier,
+                importPrice: matchedItem.price,
+                date: newOrder.date,
+                refId: newOrder.id,
+                status: 'AVAILABLE',
+                id: formattedSn
+              });
+            }
+          }
+
+          setState(prev => ({
+            ...prev,
+            serials: [
+              ...(prev.serials || []).filter(s => !removedSerials.includes(s.sn)),
+              ...addedSerials.map(sn => {
+                const matchedItem = newOrder.items.find(item => {
+                  const snVal = (item as any).sn;
+                  if (Array.isArray(snVal)) return snVal.includes(sn);
+                  if (typeof snVal === 'string') return snVal.split(',').map(x => x.trim()).includes(sn);
+                  return false;
+                });
+                return {
+                  prodId: matchedItem?.id || '',
+                  sn,
+                  supplier: newOrder.supplier,
+                  importPrice: matchedItem?.price || 0,
+                  date: newOrder.date,
+                  refId: newOrder.id,
+                  status: 'AVAILABLE' as const
+                };
+              })
+            ]
+          }));
         } else {
           await apiService.createRecord('Imports', syncData);
         }
@@ -1367,10 +1451,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               detailPromises.push(apiService.createRecord('StockCards', stockCardData));
             }
 
-            const p = state.products.find(prod => prod.id === newItem.id);
+            const p = stateRef.current.products.find(prod => prod.id === newItem.id);
             if (p && !p.isService) {
               detailPromises.push(apiService.updateRecord('Products', newItem.id, { 
-                stock: p.stock - (existingOrder?.items.find(old => old.id === p.id)?.qty || 0) + newItem.qty, // Estimate new stock or we can ignore perfect async match and use the computed state later, but let's carefully compute it
+                stock: p.stock - (existingOrder?.items.find(old => old.id === p.id)?.qty || 0) + newItem.qty,
                 costPrice: newItem.price
               }));
             }
@@ -1378,7 +1462,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             detailPromises.push(apiService.deleteRecord('ImportDetails', detailId));
             detailPromises.push(apiService.deleteRecord('StockCards', scId));
             
-            const p = state.products.find(prod => prod.id === oldItem.id);
+            const p = stateRef.current.products.find(prod => prod.id === oldItem.id);
             if (p && !p.isService) {
               detailPromises.push(apiService.updateRecord('Products', p.id, { 
                 stock: p.stock - oldItem.qty 
@@ -1395,7 +1479,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const updateImportOrder = async (id: string, updates: Partial<ImportOrder>) => {
-    const currentOrder = state.importOrders?.find(o => o.id === id);
+    const currentOrder = (stateRef.current.importOrders || []).find(o => o.id === id);
     let calculatedDebt: number | undefined;
 
     if (currentOrder) {
@@ -1440,7 +1524,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     
     if (updates.walletId !== undefined) {
       apiUpdates.walletId = updates.walletId;
-      const walletObj = state.wallets.find(w => w.id === updates.walletId);
+      const walletObj = stateRef.current.wallets.find(w => w.id === updates.walletId);
       apiUpdates.walletName = walletObj ? walletObj.name : '';
     }
     

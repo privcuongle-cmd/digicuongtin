@@ -1430,7 +1430,7 @@ return (
               <p className="md:text-sm text-xs font-bold text-blue-600 mb-4 tracking-tighter">{activeSerialProduct.name}</p>
               <div className="grid grid-cols-1 gap-2 max-h-[300px] overflow-y-auto pr-1">
                 {serials
-                  .filter(s => s.prodId === activeSerialProduct.id && s.status !== 'SOLD' && !cart.find(item => item.id === activeSerialProduct.id)?.serials?.includes(s.sn))
+                  .filter(s => s.prodId === activeSerialProduct.id && (s.status !== 'SOLD' || (currentTab.editingInvoiceId && s.refId === currentTab.editingInvoiceId)) && !cart.find(item => item.id === activeSerialProduct.id)?.serials?.includes(s.sn))
                   .map((s, sIdx) => (
                     <button 
                       key={`${s.sn}-${sIdx}`}
@@ -1445,7 +1445,7 @@ return (
                     </button>
                   ))
                 }
-                {serials.filter(s => s.prodId === activeSerialProduct.id && s.status !== 'SOLD' && !cart.find(item => item.id === activeSerialProduct.id)?.serials?.includes(s.sn)).length === 0 && (
+                {serials.filter(s => s.prodId === activeSerialProduct.id && (s.status !== 'SOLD' || (currentTab.editingInvoiceId && s.refId === currentTab.editingInvoiceId)) && !cart.find(item => item.id === activeSerialProduct.id)?.serials?.includes(s.sn)).length === 0 && (
                   <p className="text-center text-slate-400 md:text-sm text-xs py-10 font-bold uppercase tracking-widest italic opacity-60">Hết IMEI khả dụng trong kho</p>
                 )}
               </div>

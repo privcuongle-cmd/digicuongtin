@@ -7,6 +7,7 @@ import { generateId } from '../lib/idUtils';
 import { useMobileBackModal } from '../hooks/useMobileBackModal';
 import { formatDateTime, parseDateString } from '../lib/utils';
 import { QRCodeSVG } from 'qrcode.react';
+import { BarcodeScannerModal } from '../components/BarcodeScannerModal';
 
 export const CameraInstallations: React.FC = () => {
   const { 
@@ -31,6 +32,7 @@ export const CameraInstallations: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(20);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
 
   // Form state
   const [customerName, setCustomerName] = useState('');
@@ -776,15 +778,25 @@ export const CameraInstallations: React.FC = () => {
                       </div>
                       <div>
                         <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1 tracking-wider">Mã QR / Serial</label>
-                        <div className="relative">
+                        <div className="relative flex items-center">
                           <input 
                             type="text"
-                            className={`w-full bg-white border border-slate-100 rounded-xl px-3 py-2 text-[13px] font-mono font-bold text-blue-600 focus:border-blue-300 outline-none transition-all ${!isEditing ? 'cursor-default' : ''}`}
+                            className={`w-full bg-white border border-slate-100 rounded-xl pl-3 pr-10 py-2 text-[13px] font-mono font-bold text-blue-600 focus:border-blue-300 outline-none transition-all ${!isEditing ? 'cursor-default' : ''}`}
                             placeholder="Mã vạch..."
                             value={qrCode}
                             onChange={(e) => isEditing && setQrCode(e.target.value)}
                             readOnly={!isEditing}
                           />
+                          {isEditing && (
+                            <button
+                              type="button"
+                              onClick={() => setIsScannerOpen(true)}
+                              className="absolute right-2 p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all cursor-pointer flex items-center justify-center active:scale-95"
+                              title="Quét mã vạch / QR"
+                            >
+                              <QrCode size={18} />
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -938,6 +950,15 @@ export const CameraInstallations: React.FC = () => {
           />
         </div>
       )}
+
+      {/* Barcode / QR Code Scanner overlay */}
+      <BarcodeScannerModal 
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onScanSuccess={(decodedText) => {
+          setQrCode(decodedText);
+        }}
+      />
     </div>
   );
 };

@@ -588,13 +588,17 @@ return (
                     {p.isService && <span className="bg-emerald-100 text-emerald-700 text-[9px] font-bold px-2 py-0.5 rounded">Dịch vụ</span>}
                   </div>
                   <p className="font-bold text-base text-slate-800 break-words leading-tight">{p.name}</p>
-                  <p className="text-[12px] text-blue-600 font-bold tracking-wide mt-1">{formatNumber(p.price)}đ</p>
-                </div>
-                <div className="text-right pl-3 border-l border-slate-100 shrink-0 min-w-[65px]">
-                  <p className="text-[9px] text-slate-400 font-bold tracking-widest mb-1">{p.isService ? 'Trạng thái' : 'Tồn kho'}</p>
-                  <p className={`font-bold ${p.isService ? 'text-emerald-500 text-xs sm:text-sm' : (p.stock !== null && p.stock < (p.lowStockThreshold ?? 5) ? 'text-red-500 text-lg sm:text-xl' : 'text-slate-800 text-lg sm:text-xl')}`}>
-                    {p.isService ? 'Sẵn sàng' : p.stock}
-                  </p>
+                  
+                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1.5 text-xs sm:text-[13px]">
+                    <span className="text-blue-600 font-bold tracking-wide">{formatNumber(p.price)}đ</span>
+                    <span className="text-slate-300 font-light">|</span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{p.isService ? 'Trạng thái:' : 'Tồn:'}</span>
+                      <span className={`font-bold ${p.isService ? 'text-emerald-500' : (p.stock !== null && p.stock < (p.lowStockThreshold ?? 5) ? 'text-red-500' : 'text-slate-800')}`}>
+                        {p.isService ? 'Sẵn sàng' : p.stock}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))

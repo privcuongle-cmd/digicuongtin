@@ -240,7 +240,11 @@ export const Import: React.FC = () => {
     const upperSn = sn.toUpperCase();
     
     // Check if serial already exists in the system
-    const existingSerial = serials?.find(s => (s.sn || '').toUpperCase() === upperSn);
+    const isEditMode = !!importDraft?.editingId;
+    const existingSerial = serials?.find(s => 
+      (s.sn || '').toUpperCase() === upperSn && 
+      (!isEditMode || s.refId !== importDraft?.editingId)
+    );
     if (existingSerial) {
       alert(`Mã serial ${upperSn} đã tồn tại trong hệ thống!`);
       return;
