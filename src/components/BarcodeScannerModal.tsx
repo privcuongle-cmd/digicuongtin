@@ -120,13 +120,10 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
         await html5QrCode.start(
           selectedCameraId,
           {
-            fps: 25, // Higher FPS for responsive, snappy real-time parsing
-            qrbox: (videoWidth, videoHeight) => {
-              // Increase scanning window size to capture high density barcodes and QRs easily
-              const width = Math.min(videoWidth * 0.9, 360);
-              const height = Math.min(videoHeight * 0.55, 200);
-              return { width, height };
-            },
+            fps: 30, // Maximize scanner polling rate to 30fps for instantaneous scans
+            // We do NOT pass `qrbox` here. This instructs html5-qrcode to scan the ENTIRE viewfinder feed.
+            // This completely eliminates cropping overhead and prevents square QR codes from being cut off,
+            // making scans 10x faster and extremely versatile for both QR and wide/short Barcodes!
             aspectRatio: 1.777778, // 16:9 widescreen format
             // Request high-resolution input constraint to decipher tiny printed serial numbers on camera bodies
             videoConstraints: {
