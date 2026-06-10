@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Camera, RefreshCw, AlertCircle } from 'lucide-react';
+import { X, Camera, RefreshCw, AlertCircle, Zap, ZapOff } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 
 interface BarcodeScannerModalProps {
@@ -17,6 +17,8 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [hasTorch, setHasTorch] = useState(false);
+  const [isTorchOn, setIsTorchOn] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerId = "barcode-scanner-video-region";
 
@@ -43,6 +45,8 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
 
     setError(null);
     setIsInitializing(true);
+    setHasTorch(false);
+    setIsTorchOn(false);
 
     // Get list of video devices first
     Html5Qrcode.getCameras()
@@ -91,6 +95,8 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
 
     let isMounted = true;
     setIsInitializing(true);
+    setHasTorch(false);
+    setIsTorchOn(false);
 
     const startScanning = async () => {
       try {
@@ -104,22 +110,31 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
 
         if (!isMounted) return;
 
-        const html5QrCode = new Html5Qrcode(scannerId);
+        // Initialize with hardware-accelerated Native Barcode Detection when available
+        const html5QrCode = new Html5Qrcode(scannerId, {
+          useBarCodeDetectorIfSupported: true,
+          verbose: false
+        });
         scannerRef.current = html5QrCode;
 
         await html5QrCode.start(
           selectedCameraId,
           {
-            fps: 15,
+            fps: 25, // Higher FPS for responsive, snappy real-time parsing
             qrbox: (videoWidth, videoHeight) => {
-              // Standard barcode aspect ratio is wide and short
-              // Standard QR aspect ratio is a square box
-              // Let us render a versatile rectangle that scanners can scan both with ease
-              const width = Math.min(videoWidth * 0.85, 320);
-              const height = Math.min(videoHeight * 0.45, 180);
+              // Increase scanning window size to capture high density barcodes and QRs easily
+              const width = Math.min(videoWidth * 0.9, 360);
+              const height = Math.min(videoHeight * 0.55, 200);
               return { width, height };
             },
-            aspectRatio: 1.777778 // 16:9 aspect ratio standard
+            aspectRatio: 1.777778, // 16:9 widescreen format
+            // Request high-resolution input constraint to decipher tiny printed serial numbers on camera bodies
+            videoConstraints: {
+              width: { min: 640, ideal: 1280, max: 1920 },
+              height: { min: 480, ideal: 720, max: 1080 },
+              facingMode: "environment",
+              focusMode: "continuous"
+            } as any
           },
           (decodedText) => {
             playBeep();
@@ -134,6 +149,16 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
         if (isMounted) {
           setIsInitializing(false);
           setError(null);
+          
+          // Detect flashlight capabilities of selected camera stream
+          try {
+            const capabilities = html5QrCode.getRunningTrackCameraCapabilities() as any;
+            if (capabilities && (capabilities.hasTorch || capabilities.torch)) {
+              setHasTorch(true);
+            }
+          } catch (capsErr) {
+            console.log("Failed to query camera capabilities:", capsErr);
+          }
         }
       } catch (err: any) {
         console.error("Failed to start scanner with standard camera id", err);
@@ -156,6 +181,19 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
     const currentIndex = cameras.findIndex(c => c.id === selectedCameraId);
     const nextIndex = (currentIndex + 1) % cameras.length;
     setSelectedCameraId(cameras[nextIndex].id);
+  };
+
+  const toggleTorch = async () => {
+    if (!scannerRef.current || !scannerRef.current.isScanning) return;
+    try {
+      const nextState = !isTorchOn;
+      await scannerRef.current.applyVideoConstraints({
+        advanced: [{ torch: nextState } as any]
+      });
+      setIsTorchOn(nextState);
+    } catch (err) {
+      console.error("Failed to toggle torch", err);
+    }
   };
 
   if (!isOpen) return null;
@@ -207,7 +245,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
                   </div>
                   
                   {/* Outer laser line scanning pulse */}
-                  <div className="w-11/12 max-w-[325px] h-32 md:h-36 relative border border-dashed border-blue-500/50 rounded-xl">
+                  <div className="w-11/12 max-w-[325px] h-36 md:h-40 relative border border-dashed border-blue-500/50 rounded-xl">
                     <div className="absolute inset-0 border-2 border-blue-500 rounded-xl animate-pulse"></div>
                     {/* Corner accents */}
                     <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-blue-500 rounded-tl-md"></div>
@@ -219,7 +257,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
                   </div>
 
                   <div className="text-[10px] text-slate-400 font-bold bg-slate-950/70 py-1 px-3 rounded-full uppercase tracking-widest">
-                    Tự động nhận diện & lấy chữ
+                    Tải phân giải cao | Quét laser siêu tốc
                   </div>
                 </div>
               )}
@@ -229,8 +267,21 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
 
         {/* Footer controls */}
         <div className="p-4 bg-slate-950 border-t border-slate-900 flex items-center justify-between">
-          <div className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">
-            {cameras.length > 1 && `Phát hiện ${cameras.length} camera`}
+          <div className="flex gap-2">
+            {hasTorch && !error && (
+              <button
+                type="button"
+                onClick={toggleTorch}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-white font-bold text-[12px] border transition-colors cursor-pointer active:scale-95 ${
+                  isTorchOn 
+                    ? 'bg-amber-500/20 border-amber-500/50 text-amber-400' 
+                    : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-300'
+                }`}
+              >
+                {isTorchOn ? <ZapOff size={14} className="text-amber-400" /> : <Zap size={14} className="text-amber-400 animate-pulse" />}
+                {isTorchOn ? 'Tắt Đèn' : 'Bật Đèn'}
+              </button>
+            )}
           </div>
 
           {cameras.length > 1 && !error && (

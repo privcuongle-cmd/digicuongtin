@@ -362,6 +362,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             };
           }) : [];
 
+        const mappedImports = apiImports.length > 0 ? apiImports.map((imp: any) => {
+          const total = parseFormattedNumber(imp.totalAmount || imp.total || 0);
+          const paid = parseFormattedNumber(imp.paidAmount || imp.paid || 0);
+          // Calculate debt based on total and paid, ignore the debt field from API if it's 0 but total > paid
+          let debt = total - paid;
+          if (imp.debt !== undefined && imp.debt !== '' && imp.debt !== null) {
+              const apiDebt = parseFormattedNumber(imp.debt);
+              // Only use API debt if it makes sense (e.g., if total is 0, or if apiDebt is not 0 when total > paid)
+              if (apiDebt !== 0 || total === paid) {
+                  debt = apiDebt;
+              }
+          }
+          
+          return {
+            id: String(imp.id || ''),
+            date: formatDateTime(imp.createdAt || imp.date),
+            supplier: String(imp.supplierId || imp.supplier || ''),
+            status: imp.status || 'DONE',
+            total,
+            paid,
+            debt,
+            discount: parseFormattedNumber(imp.discount || 0),
+            returnCost: parseFormattedNumber(imp.returnCost || 0),
+            shippingFee: parseFormattedNumber(imp.shippingFee || 0),
+            otherCost: parseFormattedNumber(imp.otherCost || 0),
+            note: String(imp.note || ''),
+            walletId: String(imp.walletId || ''),
+            items: extractItems(imp, apiImportDetails, ['importID', 'importId', 'ImportID', 'importid'])
+          };
+        }) : [];
+
         const soldSerials = new Set<string>();
         const processSerials = (items: any[], action: 'add' | 'delete') => {
           items.forEach((item: any) => {
@@ -383,6 +414,62 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         mappedInvoices.forEach((inv: any) => processSerials(inv.items, 'add'));
         mappedReturnImports.forEach((ret: any) => processSerials(ret.items, 'add')); // Return back to supplier = remove from available
         mappedReturnSales.forEach((ret: any) => processSerials(ret.items, 'delete')); // Return from customer = add back to available
+
+        // Collect all import serials as a fallback self-healing step
+        const importSerialsList: any[] = [];
+        mappedImports.forEach((imp: any) => {
+          imp.items.forEach((item: any) => {
+            const snVal = item.sn;
+            let sns: string[] = [];
+            if (Array.isArray(snVal)) {
+              sns = snVal;
+            } else if (typeof snVal === 'string' && snVal.trim() !== '') {
+              sns = snVal.split(',').map((s: any) => s.trim()).filter(Boolean);
+            }
+            
+            sns.forEach((sn: string) => {
+              const cleanedSn = sn.trim();
+              if (cleanedSn) {
+                importSerialsList.push({
+                  prodId: item.id,
+                  sn: cleanedSn,
+                  supplier: imp.supplier,
+                  importPrice: item.price,
+                  date: imp.date,
+                  refId: imp.id,
+                  status: soldSerials.has(cleanedSn) ? 'SOLD' : 'AVAILABLE'
+                });
+              }
+            });
+          });
+        });
+
+        // Merge apiSerials and importSerialsList
+        const serialsBySn = new Map<string, any>();
+        importSerialsList.forEach(s => {
+          serialsBySn.set(s.sn.toUpperCase(), s);
+        });
+
+        if (apiSerials && apiSerials.length > 0) {
+          apiSerials.forEach((s: any) => {
+            const sn = parseSnFromDb(s.sn)?.trim() || '';
+            if (sn) {
+              const upperSn = sn.toUpperCase();
+              const existing = serialsBySn.get(upperSn);
+              serialsBySn.set(upperSn, {
+                prodId: String(s.prodId || existing?.prodId || ''),
+                sn,
+                supplier: String(s.supplier || existing?.supplier || ''),
+                importPrice: s.importPrice !== undefined && s.importPrice !== '' ? parseFormattedNumber(s.importPrice) : (existing?.importPrice || 0),
+                date: formatDateTime(s.createdAt || s.date || existing?.date),
+                refId: String(s.refId || existing?.refId || ''),
+                status: soldSerials.has(sn) ? 'SOLD' : 'AVAILABLE'
+              });
+            }
+          });
+        }
+
+        const mergedSerials = Array.from(serialsBySn.values());
 
         setState(prev => ({
           ...prev,
@@ -416,18 +503,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             address: String(s.address || ''),
             totalDebt: parseFormattedNumber(s.debt)
           })) : [],
-          serials: apiSerials.length > 0 ? apiSerials.map((s: any) => {
-            const sn = parseSnFromDb(s.sn)?.trim() || '';
-            return {
-              prodId: String(s.prodId || ''),
-              sn,
-              supplier: String(s.supplier || ''),
-              importPrice: parseFormattedNumber(s.importPrice),
-              date: formatDateTime(s.createdAt || s.date),
-              refId: String(s.refId || ''),
-              status: soldSerials.has(sn) ? 'SOLD' : 'AVAILABLE'
-            };
-          }) : [],
+          serials: mergedSerials,
           stockCards: apiStockCards.length > 0 ? apiStockCards.map((c: any) => {
             const snVal = parseSnFromDb(c.sn);
             return {
@@ -436,36 +512,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             };
           }) : [],
           invoices: mappedInvoices,
-          importOrders: apiImports.length > 0 ? apiImports.map((imp: any) => {
-            const total = parseFormattedNumber(imp.totalAmount || imp.total || 0);
-            const paid = parseFormattedNumber(imp.paidAmount || imp.paid || 0);
-            // Calculate debt based on total and paid, ignore the debt field from API if it's 0 but total > paid
-            let debt = total - paid;
-            if (imp.debt !== undefined && imp.debt !== '' && imp.debt !== null) {
-                const apiDebt = parseFormattedNumber(imp.debt);
-                // Only use API debt if it makes sense (e.g., if total is 0, or if apiDebt is not 0 when total > paid)
-                if (apiDebt !== 0 || total === paid) {
-                    debt = apiDebt;
-                }
-            }
-            
-            return {
-              id: String(imp.id || ''),
-              date: formatDateTime(imp.createdAt || imp.date),
-              supplier: String(imp.supplierId || imp.supplier || ''),
-              status: imp.status || 'DONE',
-              total,
-              paid,
-              debt,
-              discount: parseFormattedNumber(imp.discount || 0),
-              returnCost: parseFormattedNumber(imp.returnCost || 0),
-              shippingFee: parseFormattedNumber(imp.shippingFee || 0),
-              otherCost: parseFormattedNumber(imp.otherCost || 0),
-              note: String(imp.note || ''),
-              walletId: String(imp.walletId || ''),
-              items: extractItems(imp, apiImportDetails, ['importID', 'importId', 'ImportID', 'importid'])
-            };
-          }) : [],
+          importOrders: mappedImports,
           returnImportOrders: mappedReturnImports,
           returnSalesOrders: mappedReturnSales,
           cashTransactions: apiCash.length > 0 ? apiCash.map((c: any) => ({
@@ -1406,6 +1453,64 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           }));
         } else {
           await apiService.createRecord('Imports', syncData);
+
+          const addedSerials: string[] = [];
+          newOrder.items.forEach(item => {
+            const snVal = (item as any).sn;
+            if (snVal) {
+              if (Array.isArray(snVal)) {
+                addedSerials.push(...snVal);
+              } else if (typeof snVal === 'string') {
+                addedSerials.push(...snVal.split(',').map(s => s.trim()).filter(Boolean));
+              }
+            }
+          });
+
+          for (const sn of addedSerials) {
+            const matchedItem = newOrder.items.find(item => {
+              const snVal = (item as any).sn;
+              if (Array.isArray(snVal)) return snVal.includes(sn);
+              if (typeof snVal === 'string') return snVal.split(',').map(x => x.trim()).includes(sn);
+              return false;
+            });
+            if (matchedItem) {
+              const formattedSn = formatSnForDb(sn);
+              await apiService.createRecord('Serials', {
+                prodId: matchedItem.id,
+                sn: formattedSn,
+                supplier: newOrder.supplier,
+                importPrice: matchedItem.price,
+                date: newOrder.date,
+                refId: newOrder.id,
+                status: 'AVAILABLE',
+                id: formattedSn
+              });
+            }
+          }
+
+          setState(prev => ({
+            ...prev,
+            serials: [
+              ...(prev.serials || []),
+              ...addedSerials.map(sn => {
+                const matchedItem = newOrder.items.find(item => {
+                  const snVal = (item as any).sn;
+                  if (Array.isArray(snVal)) return snVal.includes(sn);
+                  if (typeof snVal === 'string') return snVal.split(',').map(x => x.trim()).includes(sn);
+                  return false;
+                });
+                return {
+                  prodId: matchedItem?.id || '',
+                  sn,
+                  supplier: newOrder.supplier,
+                  importPrice: matchedItem?.price || 0,
+                  date: newOrder.date,
+                  refId: newOrder.id,
+                  status: 'AVAILABLE' as const
+                };
+              })
+            ]
+          }));
         }
 
         const maxItems = Math.max(newOrder.items.length, isUpdate && existingOrder ? existingOrder.items.length : 0);
