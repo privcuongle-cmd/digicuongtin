@@ -40,93 +40,106 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
     }
   };
 
+  // Manage scanner lifecycle with strict cleanup and synchronization
   useEffect(() => {
-    if (!isOpen) return;
-
-    setError(null);
-    setIsInitializing(true);
-    setHasTorch(false);
-    setIsTorchOn(false);
-
-    // Get list of video devices first
-    Html5Qrcode.getCameras()
-      .then((devices) => {
-        if (devices && devices.length > 0) {
-          setCameras(devices);
-          // Prefer back camera (environment) if available
-          const backCam = devices.find(device => 
-            device.label.toLowerCase().includes('back') || 
-            device.label.toLowerCase().includes('rear') ||
-            device.label.toLowerCase().includes('environment')
-          );
-          setSelectedCameraId(backCam ? backCam.id : devices[0].id);
-        } else {
-          setError("Không tìm thấy camera nào trên thiết bị.");
-          setIsInitializing(false);
-        }
-      })
-      .catch((err) => {
-        console.error("getCameras failed", err);
-        setError("Không thể truy cập camera. Vui lòng cấp quyền camera cho ứng dụng.");
-        setIsInitializing(false);
-      });
-
-    return () => {
-      // Cleanup scanner if active
-      if (scannerRef.current) {
-        if (scannerRef.current.isScanning) {
-          scannerRef.current.stop()
-            .then(() => {
-              scannerRef.current = null;
-            })
-            .catch(err => {
-              console.error("Error stopping scanner in cleanup", err);
-              scannerRef.current = null;
-            });
-        } else {
-          scannerRef.current = null;
-        }
-      }
-    };
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen || !selectedCameraId) return;
-
     let isMounted = true;
-    setIsInitializing(true);
-    setHasTorch(false);
-    setIsTorchOn(false);
+    let localScanner: Html5Qrcode | null = null;
 
-    const startScanning = async () => {
-      try {
-        // Stop previous instance if any
-        if (scannerRef.current) {
+    const stopActiveScanner = async () => {
+      if (scannerRef.current) {
+        try {
           if (scannerRef.current.isScanning) {
             await scannerRef.current.stop();
           }
-          scannerRef.current = null;
+        } catch (stopErr) {
+          console.warn("Error stopping active scanner", stopErr);
         }
+        scannerRef.current = null;
+      }
+      if (localScanner) {
+        try {
+          if (localScanner.isScanning) {
+            await localScanner.stop();
+          }
+        } catch (stopErr) {
+          console.warn("Error stopping local scanner", stopErr);
+        }
+        localScanner = null;
+      }
+    };
 
-        if (!isMounted) return;
+    const runInitAndScan = async () => {
+      // 1. If not open, stop any existing scan and return
+      if (!isOpen) {
+        await stopActiveScanner();
+        if (isMounted) {
+          setIsTorchOn(false);
+          setHasTorch(false);
+        }
+        return;
+      }
 
-        // Initialize with hardware-accelerated Native Barcode Detection when available, tuned for QR codes only to maximize performance
+      // 2. Clear former errors & reset states
+      setError(null);
+      setIsInitializing(true);
+      setHasTorch(false);
+      setIsTorchOn(false);
+
+      // 3. Stop previous scanner and wait for resource release
+      await stopActiveScanner();
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      if (!isMounted || !isOpen) return;
+
+      // 4. Load cameras if not already loaded
+      let camId = selectedCameraId;
+      if (cameras.length === 0) {
+        try {
+          const devices = await Html5Qrcode.getCameras();
+          if (devices && devices.length > 0) {
+            if (isMounted) setCameras(devices);
+            const backCam = devices.find(device => 
+              device.label.toLowerCase().includes('back') || 
+              device.label.toLowerCase().includes('rear') ||
+              device.label.toLowerCase().includes('environment')
+            );
+            camId = backCam ? backCam.id : devices[0].id;
+            if (isMounted) setSelectedCameraId(camId);
+          } else {
+            if (isMounted) {
+              setError("Không tìm thấy camera nào trên thiết bị.");
+              setIsInitializing(false);
+            }
+            return;
+          }
+        } catch (err) {
+          console.error("getCameras failed", err);
+          if (isMounted) {
+            setError("Không thể truy cập camera. Vui lòng cấp quyền camera cho ứng dụng.");
+            setIsInitializing(false);
+          }
+          return;
+        }
+      }
+
+      if (!camId) return;
+      if (!isMounted || !isOpen) return;
+
+      // 5. Initialize & start html5QrCode
+      try {
         const html5QrCode = new Html5Qrcode(scannerId, {
           useBarCodeDetectorIfSupported: true,
           verbose: false,
           formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
         });
+        localScanner = html5QrCode;
         scannerRef.current = html5QrCode;
 
         await html5QrCode.start(
-          selectedCameraId,
+          camId,
           {
-            fps: 30, // Maximize scanner polling rate to 30fps for instantaneous scans
-            // We do NOT pass `qrbox` here. This instructs html5-qrcode to scan the ENTIRE viewfinder feed.
-            // This completely eliminates cropping overhead and prevents square QR codes from being cut off,
-            // making scans 10x faster and extremely versatile for both QR and wide/short Barcodes!
-            aspectRatio: 1.777778, // 16:9 widescreen format
-            // Request high-resolution input constraint to decipher tiny printed serial numbers on camera bodies
+            fps: 30,
+            aspectRatio: 1.777778,
             videoConstraints: {
               width: { min: 640, ideal: 1280, max: 1920 },
               height: { min: 480, ideal: 720, max: 1080 },
@@ -140,15 +153,14 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
             onClose();
           },
           (errorMessage) => {
-            // silent diagnostic logs or ignore
+            // ignore constant scan logs
           }
         );
 
-        if (isMounted) {
+        if (isMounted && isOpen) {
           setIsInitializing(false);
           setError(null);
           
-          // Detect flashlight capabilities of selected camera stream
           try {
             const capabilities = html5QrCode.getRunningTrackCameraCapabilities() as any;
             if (capabilities && (capabilities.hasTorch || capabilities.torch)) {
@@ -159,20 +171,60 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
           }
         }
       } catch (err: any) {
-        console.error("Failed to start scanner with standard camera id", err);
-        if (isMounted) {
-          setError("Không thể khởi động camera quét mã. Vui lòng thử camera khác hoặc cấp lại quyền camera.");
-          setIsInitializing(false);
+        console.error("html5QrCode.start failed during scan initialization", err);
+        // Retry once after 250ms delay if browser hardware resources take a while to be freed
+        if (isMounted && isOpen) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          if (!isMounted || !isOpen) return;
+
+          try {
+            const html5QrCode2 = new Html5Qrcode(scannerId, {
+              useBarCodeDetectorIfSupported: true,
+              verbose: false,
+              formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
+            });
+            localScanner = html5QrCode2;
+            scannerRef.current = html5QrCode2;
+
+            await html5QrCode2.start(
+              camId,
+              {
+                fps: 30,
+                aspectRatio: 1.777778,
+                videoConstraints: {
+                  width: { min: 640, ideal: 1280, max: 1920 },
+                  height: { min: 480, ideal: 720, max: 1080 },
+                  facingMode: "environment"
+                } as any
+              },
+              (decodedText) => {
+                playBeep();
+                onScanSuccess(decodedText);
+                onClose();
+              },
+              () => {}
+            );
+
+            setIsInitializing(false);
+            setError(null);
+          } catch (retryErr) {
+            console.error("Retry start also failed", retryErr);
+            setError("Không thể khởi động camera quét mã. Vui lòng thử camera khác hoặc cấp lại quyền camera.");
+            setIsInitializing(false);
+          }
         }
       }
     };
 
-    startScanning();
+    runInitAndScan();
 
     return () => {
       isMounted = false;
+      if (localScanner && localScanner.isScanning) {
+        localScanner.stop().catch(err => console.warn("Cleanup stop failed", err));
+      }
     };
-  }, [isOpen, selectedCameraId]);
+  }, [isOpen, selectedCameraId, cameras.length]);
 
   const switchCamera = () => {
     if (cameras.length <= 1) return;
@@ -194,10 +246,12 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col justify-center items-center bg-slate-900/90 backdrop-blur-sm p-4">
+    <div 
+      className={`fixed inset-0 z-[9999] flex flex-col justify-center items-center bg-slate-900/90 backdrop-blur-sm p-4 transition-all duration-300 ${
+        isOpen ? 'opacity-100 pointer-events-auto scale-100' : 'opacity-0 pointer-events-none scale-95'
+      }`}
+    >
       {/* Modal Card */}
       <div className="relative w-full max-w-md bg-slate-950 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col">
         {/* Header */}
