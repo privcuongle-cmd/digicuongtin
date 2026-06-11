@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Camera, RefreshCw, AlertCircle, Zap, ZapOff } from 'lucide-react';
+import { X, Camera, RefreshCw, AlertCircle, Zap, ZapOff, Image as ImageIcon } from 'lucide-react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 
 interface BarcodeScannerModalProps {
@@ -19,8 +19,105 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
   const [isInitializing, setIsInitializing] = useState(true);
   const [hasTorch, setHasTorch] = useState(false);
   const [isTorchOn, setIsTorchOn] = useState(false);
+  const [isProcessingCapture, setIsProcessingCapture] = useState(false);
+  const [captureError, setCaptureError] = useState<string | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const scannerId = "barcode-scanner-video-region";
+
+  const handleCaptureAndScan = async () => {
+    if (isProcessingCapture) return;
+    
+    // Find video element inside our active preview container
+    const videoEl = document.querySelector(`#${scannerId} video`) as HTMLVideoElement;
+    if (!videoEl) {
+      setCaptureError("Không tìm thấy màn hình camera đang hoạt động.");
+      return;
+    }
+
+    try {
+      setIsProcessingCapture(true);
+      setCaptureError(null);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = videoEl.videoWidth || 1280;
+      canvas.height = videoEl.videoHeight || 720;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        throw new Error("Không thể khởi tạo bộ xử lý ảnh.");
+      }
+
+      // Draw current video frame to canvas
+      ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+
+      // Convert canvas to blob/file
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) {
+        throw new Error("Không thể trích xuất hình ảnh từ camera.");
+      }
+
+      const file = new File([blob], "capture.png", { type: "image/png" });
+
+      // Create a hidden host container for the temporary static scanner
+      let tempScannerHost = document.getElementById('temp-scanner-host');
+      if (!tempScannerHost) {
+        tempScannerHost = document.createElement('div');
+        tempScannerHost.id = 'temp-scanner-host';
+        tempScannerHost.style.display = 'none';
+        document.body.appendChild(tempScannerHost);
+      }
+
+      const tempScanner = new Html5Qrcode('temp-scanner-host');
+      try {
+        const decodedText = await tempScanner.scanFile(file, false);
+        playBeep();
+        onScanSuccess(decodedText);
+        onClose();
+      } catch (scanErr) {
+        console.warn("Static canvas frame scan failed", scanErr);
+        setCaptureError("Không nhận diện được mã QR nào từ ảnh chụp. Hãy giữ thẳng đứng camera và nhấn chụp lại.");
+        setTimeout(() => setCaptureError(null), 3000);
+      } finally {
+        setIsProcessingCapture(false);
+      }
+    } catch (err: any) {
+      console.error("Capture and scan error", err);
+      setCaptureError(err?.message || "Lỗi khi chụp và xử lý quét mã.");
+      setIsProcessingCapture(false);
+      setTimeout(() => setCaptureError(null), 3000);
+    }
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsProcessingCapture(true);
+      setCaptureError(null);
+
+      let tempScannerHost = document.getElementById('temp-scanner-host');
+      if (!tempScannerHost) {
+        tempScannerHost = document.createElement('div');
+        tempScannerHost.id = 'temp-scanner-host';
+        tempScannerHost.style.display = 'none';
+        document.body.appendChild(tempScannerHost);
+      }
+
+      const tempScanner = new Html5Qrcode('temp-scanner-host');
+      const decodedText = await tempScanner.scanFile(file, false);
+      playBeep();
+      onScanSuccess(decodedText);
+      onClose();
+    } catch (scanErr) {
+      console.warn("File QR scan failed", scanErr);
+      setCaptureError("Không tìm thấy mã QR nào trong file ảnh vừa chọn. Vui lòng thử ảnh khác rõ nét hơn!");
+      setTimeout(() => setCaptureError(null), 4000);
+    } finally {
+      setIsProcessingCapture(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   // Scan success audio or haptic feedback can be done inside onScanSuccess
   const playBeep = () => {
@@ -314,6 +411,53 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
                 </div>
               )}
             </>
+          )}
+        </div>
+
+        {/* Capture and Album Actions */}
+        <div className="flex flex-col gap-2 p-4 bg-slate-950 border-t border-slate-900 border-dashed">
+          <div className="flex gap-2 w-full">
+            <button
+              type="button"
+              onClick={handleCaptureAndScan}
+              disabled={isInitializing || !!error || isProcessingCapture}
+              className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:from-slate-900 disabled:to-slate-900 text-white font-bold text-[13px] shadow-lg shadow-blue-500/10 active:scale-95 transition-all text-center uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            >
+              {isProcessingCapture ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>Đang Phân Tích...</span>
+                </>
+              ) : (
+                <>
+                  <Camera size={16} className="text-white animate-pulse" />
+                  <span>Chụp & Quét QR</span>
+                </>
+              )}
+            </button>
+            
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isProcessingCapture}
+              className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-slate-900 hover:bg-slate-850 disabled:bg-slate-900 text-slate-300 font-bold text-[13px] border border-slate-800 transition-all active:scale-95 text-center uppercase tracking-wider shrink-0 disabled:opacity-50 cursor-pointer"
+            >
+              <ImageIcon size={15} className="text-slate-400" />
+              <span>Ảnh từ máy</span>
+            </button>
+            <input 
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileSelect}
+              accept="image/*"
+              className="hidden"
+            />
+          </div>
+          
+          {captureError && (
+            <div className="mt-1 text-center text-[12px] text-amber-400 font-medium bg-amber-500/10 border border-amber-500/20 py-2 px-3 rounded-xl animate-pulse">
+              {captureError}
+            </div>
           )}
         </div>
 
