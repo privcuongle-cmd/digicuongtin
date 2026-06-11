@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Camera, RefreshCw, AlertCircle, Zap, ZapOff } from 'lucide-react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 
 interface BarcodeScannerModalProps {
   isOpen: boolean;
@@ -110,10 +110,11 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
 
         if (!isMounted) return;
 
-        // Initialize with hardware-accelerated Native Barcode Detection when available
+        // Initialize with hardware-accelerated Native Barcode Detection when available, tuned for QR codes only to maximize performance
         const html5QrCode = new Html5Qrcode(scannerId, {
           useBarCodeDetectorIfSupported: true,
-          verbose: false
+          verbose: false,
+          formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
         });
         scannerRef.current = html5QrCode;
 
@@ -203,7 +204,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
         <div className="flex items-center justify-between p-4 border-b border-slate-900 bg-slate-950/80 backdrop-blur-md">
           <div className="flex items-center gap-2">
             <Camera className="w-5 h-5 text-blue-500 animate-pulse" />
-            <span className="text-[14px] font-black tracking-tight text-white uppercase">Quét Mã QR / Barcode</span>
+            <span className="text-[14px] font-black tracking-tight text-white uppercase">Quét Mã QR thiết bị</span>
           </div>
           <button 
             type="button"
@@ -238,7 +239,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
               {!isInitializing && (
                 <div className="absolute inset-0 pointer-events-none flex flex-col justify-between items-center p-6">
                   <div className="text-center bg-slate-950/85 px-4 py-1.5 rounded-full text-[11px] font-bold tracking-wider uppercase text-blue-400 border border-slate-900 shadow-md">
-                    Đặt mã vạch / QR vào khung căn chỉnh
+                    Đặt mã QR vào khung căn chỉnh
                   </div>
                   
                   {/* Outer laser line scanning pulse */}

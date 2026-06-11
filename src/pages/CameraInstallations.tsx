@@ -54,6 +54,10 @@ export const CameraInstallations: React.FC = () => {
   
   const [customerSuggestions, setCustomerSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [phoneSuggestions, setPhoneSuggestions] = useState<any[]>([]);
+  const [showPhoneSuggestions, setShowPhoneSuggestions] = useState(false);
+
+  const isFormEditable = !editingRecord || isEditing;
 
   const filteredRecords = useMemo(() => {
     return (cameraInstallations || []).filter(r => 
@@ -80,7 +84,7 @@ export const CameraInstallations: React.FC = () => {
 
   const handleCustomerSearch = (val: string) => {
     setCustomerName(val);
-    if (val.length > 1) {
+    if (val.trim().length > 0) {
       const filtered = (customers || []).filter(c => 
         c.name.toLowerCase().includes(val.toLowerCase()) || 
         c.phone.includes(val)
@@ -92,11 +96,26 @@ export const CameraInstallations: React.FC = () => {
     }
   };
 
+  const handlePhoneSearch = (val: string) => {
+    setCustomerPhone(val);
+    if (val.trim().length > 0) {
+      const filtered = (customers || []).filter(c => 
+        c.name.toLowerCase().includes(val.toLowerCase()) || 
+        c.phone.includes(val)
+      ).slice(0, 5);
+      setPhoneSuggestions(filtered);
+      setShowPhoneSuggestions(true);
+    } else {
+      setShowPhoneSuggestions(false);
+    }
+  };
+
   const selectCustomer = (c: any) => {
     setCustomerName(c.name);
     setCustomerPhone(c.phone);
     setCustomerId(c.id || '');
     setShowSuggestions(false);
+    setShowPhoneSuggestions(false);
   };
 
   const customerPurchasedProducts = React.useMemo(() => {
@@ -646,13 +665,14 @@ export const CameraInstallations: React.FC = () => {
                   <div className="relative">
                     <input 
                       type="text"
-                      className={`w-full bg-transparent border-none focus:ring-0 p-0 text-lg font-bold text-slate-800 placeholder:text-slate-300 ${!isEditing ? 'cursor-default' : ''}`}
+                      className={`w-full bg-transparent border-none focus:ring-0 p-0 text-lg font-bold text-slate-800 placeholder:text-slate-300 ${!isFormEditable ? 'cursor-default' : ''}`}
                       placeholder="Tên khách hàng"
                       value={customerName}
-                      onChange={(e) => isEditing && handleCustomerSearch(e.target.value)}
-                      readOnly={!isEditing}
+                      onChange={(e) => isFormEditable && handleCustomerSearch(e.target.value)}
+                      onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                      readOnly={!isFormEditable}
                     />
-                    {isEditing && showSuggestions && customerSuggestions.length > 0 && (
+                    {isFormEditable && showSuggestions && customerSuggestions.length > 0 && (
                       <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
                         {customerSuggestions.map(c => (
                           <div 
@@ -671,19 +691,34 @@ export const CameraInstallations: React.FC = () => {
 
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex-1">
+                    <div className="flex-1 relative">
                       <div className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">Số điện thoại</div>
                       <div className="flex items-center gap-2">
                         <input 
                           type="tel"
-                          className={`bg-transparent border-none focus:ring-0 p-0 text-[14px] font-bold text-slate-700 w-full ${!isEditing ? 'cursor-default' : ''}`}
+                          className={`bg-transparent border-none focus:ring-0 p-0 text-[14px] font-bold text-slate-700 w-full ${!isFormEditable ? 'cursor-default' : ''}`}
                           placeholder="Số điện thoại"
                           value={customerPhone}
-                          onChange={(e) => isEditing && setCustomerPhone(e.target.value)}
-                          readOnly={!isEditing}
+                          onChange={(e) => isFormEditable && handlePhoneSearch(e.target.value)}
+                          onBlur={() => setTimeout(() => setShowPhoneSuggestions(false), 200)}
+                          readOnly={!isFormEditable}
                         />
                         <button onClick={() => handleCopy(customerPhone)} className="text-slate-300 p-1 shrink-0"><Plus size={14} className="rotate-45" /></button>
                       </div>
+                      {isFormEditable && showPhoneSuggestions && phoneSuggestions.length > 0 && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
+                          {phoneSuggestions.map(c => (
+                            <div 
+                              key={`modal-phone-sugg-${c.id}`} 
+                              className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer border-b border-slate-50 last:border-0"
+                              onClick={() => selectCustomer(c)}
+                            >
+                              <div className="font-bold text-slate-700 text-sm">{c.name}</div>
+                              <div className="text-[11px] text-slate-500">{c.phone}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="flex gap-1.5 shrink-0">
                       <button 
@@ -726,10 +761,10 @@ export const CameraInstallations: React.FC = () => {
                   <div className="relative">
                     <input 
                       type="date"
-                      className={`bg-transparent border-none focus:ring-0 p-0 text-[12px] font-black text-blue-600 uppercase text-right ${!isEditing ? 'cursor-default' : 'cursor-pointer'}`}
+                      className={`bg-transparent border-none focus:ring-0 p-0 text-[12px] font-black text-blue-600 uppercase text-right ${!isFormEditable ? 'cursor-default' : 'cursor-pointer'}`}
                       value={installationDate}
-                      onChange={(e) => isEditing && setInstallationDate(e.target.value)}
-                      readOnly={!isEditing}
+                      onChange={(e) => isFormEditable && setInstallationDate(e.target.value)}
+                      readOnly={!isFormEditable}
                     />
                   </div>
                 </div>
@@ -741,11 +776,11 @@ export const CameraInstallations: React.FC = () => {
                       <input 
                         type="text"
                         list="camera-inventory-list"
-                        className={`w-full bg-white border border-slate-100 rounded-xl px-3 py-2 text-[14px] font-bold text-slate-800 focus:border-blue-300 outline-none transition-all ${!isEditing ? 'cursor-default' : ''}`}
+                        className={`w-full bg-white border border-slate-100 rounded-xl px-3 py-2 text-[14px] font-bold text-slate-800 focus:border-blue-300 outline-none transition-all ${!isFormEditable ? 'cursor-default' : ''}`}
                         placeholder="Nhập tên thiết bị..."
                         value={productName}
-                        onChange={(e) => isEditing && setProductName(e.target.value)}
-                        readOnly={!isEditing}
+                        onChange={(e) => isFormEditable && setProductName(e.target.value)}
+                        readOnly={!isFormEditable}
                       />
                       <datalist id="camera-inventory-list">
                         {customerPurchasedProducts.map((name, idx) => (
@@ -760,11 +795,11 @@ export const CameraInstallations: React.FC = () => {
                         <input 
                           type="text"
                           list="manufacturer-list"
-                          className={`w-full bg-white border border-slate-100 rounded-xl px-3 py-2 text-[13px] font-bold text-slate-700 focus:border-blue-300 outline-none transition-all ${!isEditing ? 'cursor-default' : ''}`}
+                          className={`w-full bg-white border border-slate-100 rounded-xl px-3 py-2 text-[13px] font-bold text-slate-700 focus:border-blue-300 outline-none transition-all ${!isFormEditable ? 'cursor-default' : ''}`}
                           placeholder="Hãng (Imou, Dahua...)"
                           value={manufacturer}
-                          onChange={(e) => isEditing && setManufacturer(e.target.value)}
-                          readOnly={!isEditing}
+                          onChange={(e) => isFormEditable && setManufacturer(e.target.value)}
+                          readOnly={!isFormEditable}
                         />
                         <datalist id="manufacturer-list">
                           <option value="Imou" />
@@ -781,13 +816,13 @@ export const CameraInstallations: React.FC = () => {
                         <div className="relative flex items-center">
                           <input 
                             type="text"
-                            className={`w-full bg-white border border-slate-100 rounded-xl pl-3 pr-10 py-2 text-[13px] font-mono font-bold text-blue-600 focus:border-blue-300 outline-none transition-all ${!isEditing ? 'cursor-default' : ''}`}
+                            className={`w-full bg-white border border-slate-100 rounded-xl pl-3 pr-10 py-2 text-[13px] font-mono font-bold text-blue-600 focus:border-blue-300 outline-none transition-all ${!isFormEditable ? 'cursor-default' : ''}`}
                             placeholder="Mã vạch..."
                             value={qrCode}
-                            onChange={(e) => isEditing && setQrCode(e.target.value)}
-                            readOnly={!isEditing}
+                            onChange={(e) => isFormEditable && setQrCode(e.target.value)}
+                            readOnly={!isFormEditable}
                           />
-                          {isEditing && (
+                          {isFormEditable && (
                             <button
                               type="button"
                               onClick={() => setIsScannerOpen(true)}
@@ -805,10 +840,10 @@ export const CameraInstallations: React.FC = () => {
                       <div>
                         <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1 tracking-wider">Wifi connection</label>
                         <select 
-                          className={`w-full bg-white border border-slate-100 rounded-xl px-3 py-2 text-[12px] font-bold text-slate-700 focus:border-blue-300 outline-none appearance-none ${!isEditing ? 'cursor-default' : ''}`}
+                          className={`w-full bg-white border border-slate-100 rounded-xl px-3 py-2 text-[12px] font-bold text-slate-700 focus:border-blue-300 outline-none appearance-none ${!isFormEditable ? 'cursor-default' : ''}`}
                           value={wifiId}
-                          onChange={(e) => isEditing && setWifiId(e.target.value)}
-                          disabled={!isEditing}
+                          onChange={(e) => isFormEditable && setWifiId(e.target.value)}
+                          disabled={!isFormEditable}
                         >
                           <option value="">-- Wifi --</option>
                           {wifiRecords.filter(w => w.customerName === customerName || !customerName).map(w => (
@@ -819,10 +854,10 @@ export const CameraInstallations: React.FC = () => {
                       <div>
                         <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1 tracking-wider">Tài khoản quản lý</label>
                         <select 
-                          className={`w-full bg-white border border-slate-100 rounded-xl px-3 py-2 text-[12px] font-bold text-slate-700 focus:border-blue-300 outline-none appearance-none ${!isEditing ? 'cursor-default' : ''}`}
+                          className={`w-full bg-white border border-slate-100 rounded-xl px-3 py-2 text-[12px] font-bold text-slate-700 focus:border-blue-300 outline-none appearance-none ${!isFormEditable ? 'cursor-default' : ''}`}
                           value={accountId}
-                          onChange={(e) => isEditing && setAccountId(e.target.value)}
-                          disabled={!isEditing}
+                          onChange={(e) => isFormEditable && setAccountId(e.target.value)}
+                          disabled={!isFormEditable}
                         >
                           <option value="">-- Tài khoản --</option>
                           {cameraAccounts.filter(a => a.customerName === customerName || !customerName).map(a => (
@@ -836,7 +871,7 @@ export const CameraInstallations: React.FC = () => {
               </div>
 
               {/* Images Section in Edit Mode */}
-              {isEditing && (
+              {isFormEditable && (
                 <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Hình ảnh thiết bị</span>
@@ -877,11 +912,11 @@ export const CameraInstallations: React.FC = () => {
               <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Ghi chú & Địa chỉ</div>
                 <textarea 
-                  className={`w-full bg-transparent border-none focus:ring-0 p-0 text-[13px] font-medium text-slate-600 resize-none min-h-[40px] ${!isEditing ? 'cursor-default' : ''}`}
+                  className={`w-full bg-transparent border-none focus:ring-0 p-0 text-[13px] font-medium text-slate-600 resize-none min-h-[40px] ${!isFormEditable ? 'cursor-default' : ''}`}
                   placeholder="Vị trí lắp, lưu ý khác..."
                   value={details || note}
-                  onChange={(e) => isEditing && setDetails(e.target.value)}
-                  readOnly={!isEditing}
+                  onChange={(e) => isFormEditable && setDetails(e.target.value)}
+                  readOnly={!isFormEditable}
                 />
               </div>
             </div>
