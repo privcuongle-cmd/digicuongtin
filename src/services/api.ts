@@ -77,8 +77,8 @@ const formatDataForSheet = (data: any): any => {
 export const apiService = {
   // Read Sheet with Cache
   readSheet: async (sheetName: string, forceRefresh = false, retries = 3) => {
-    // 1. Check Cache first
-    if (!forceRefresh) {
+    // 1. Check Cache first (Bypass cache for 'Image' to always get fresh images up to pageSize)
+    if (!forceRefresh && sheetName !== 'Image') {
       const cachedData = getCache(sheetName);
       if (cachedData) {
         console.log(`[CACHE] Hit: ${sheetName}`);
@@ -89,7 +89,7 @@ export const apiService = {
     try {
       // Use IMAGE_API_URL for Image sheet requests, otherwise main API_URL
       const baseUrl = sheetName === 'Image' 
-        ? `${IMAGE_API_URL}?sheetId=${IMAGE_SHEET_ID}&page=1&pageSize=100` 
+        ? `${IMAGE_API_URL}?sheetId=${IMAGE_SHEET_ID}&page=1&pageSize=10000` 
         : `${API_URL}?action=read&sheet=${sheetName}`;
       
       // Add cache busting and timestamp
@@ -142,7 +142,9 @@ export const apiService = {
         });
 
         // Update Cache
-        setCache(sheetName, data);
+        if (sheetName !== 'Image') {
+          setCache(sheetName, data);
+        }
         return data;
       }
       
@@ -295,7 +297,11 @@ export const apiService = {
       
       // Note: GAS doPost typically returns a JSON string, but if mode: 'no-cors' is used, we can't read it.
       // However, our fetch above doesn't use no-cors, so we should be able to read if configured.
-      return await response.json();
+      const result = await response.json();
+      if (result && (result.status === 'success' || result.success)) {
+        clearCache('Image');
+      }
+      return result;
     } catch (error) {
       console.error(`Upload error:`, error);
       return { success: false, message: 'Lỗi kết nối server' };

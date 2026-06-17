@@ -458,7 +458,7 @@ export const Import: React.FC = () => {
 
   return (
     <>
-      <div className="flex flex-col lg:flex-row bg-slate-50 print:bg-white relative">
+      <div className="flex flex-col lg:flex-row bg-slate-50 print:bg-white relative lg:h-[calc(100vh-96px)] lg:overflow-hidden w-full">
       {/* Print Template Container */}
       {printData && <PrintTemplate {...printData} />}
 
@@ -907,7 +907,7 @@ export const Import: React.FC = () => {
       </div>
 
       {/* Right Column: Summary Panel */}
-      <div className="w-full lg:w-[380px] bg-white border-l border-slate-200 flex flex-col shrink-0 print:hidden lg:static fixed inset-y-0 right-0 transform lg:translate-x-0 translate-x-full transition-transform duration-300 ease-in-out z-[100]" id="import-summary">
+      <div className="w-full lg:w-[380px] lg:h-full bg-white border-l border-slate-200 flex flex-col shrink-0 print:hidden lg:static fixed inset-y-0 right-0 transform lg:translate-x-0 translate-x-full transition-transform duration-300 ease-in-out z-[110] lg:z-10" id="import-summary">
         <div className="lg:hidden flex items-center p-4 border-b border-slate-100 bg-indigo-600 text-white gap-3">
           <button onClick={() => document.getElementById('import-summary')?.classList.add('translate-x-full')}>
             <ArrowLeft size={24} />
@@ -1036,7 +1036,7 @@ export const Import: React.FC = () => {
                 <span className="text-xs text-rose-500 italic">Vui lòng thiết lập ví trong Cài đặt</span>
               )}
               {wallets.map((w, idx) => (
-                <label key={`${w.id}-${idx}`} className="flex items-center gap-2 cursor-pointer group px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50">
+                <label key={`${w.id}-${idx}`} className="flex items-center gap-2 cursor-pointer group px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 shadow-sm">
                   <input 
                     type="radio" 
                     name="walletId" 
@@ -1051,25 +1051,48 @@ export const Import: React.FC = () => {
               ))}
             </div>
 
-            <div className="flex justify-between items-center">
-              <span className="text-sm font-medium text-slate-600">Đã thanh toán</span>
-              {walletId ? (
+            <div className="flex flex-col gap-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-slate-600">Đã thanh toán</span>
                 <NumericFormat 
                   value={paidAmount}
                   onValueChange={(values) => setPaidAmount(values.floatValue || 0)}
                   thousandSeparator="."
                   decimalSeparator=","
-                  className="w-32 text-right border border-slate-200 rounded-lg bg-white px-3 py-1.5 text-sm font-semibold outline-none focus:border-blue-500" 
+                  className="w-32 text-right border border-slate-200 rounded-lg bg-white px-3 py-1.5 text-sm font-bold text-blue-600 outline-none focus:border-blue-500 shadow-sm" 
                   placeholder="0"
                 />
-              ) : (
-                <span className="text-xs font-medium text-rose-500 italic">Vui lòng chọn ví</span>
+              </div>
+              {!walletId && paidAmount > 0 && (
+                <p className="text-[11px] text-rose-500 font-semibold text-right animate-pulse">
+                  * Vui lòng chọn ví / ngân hàng thanh toán ở trên
+                </p>
               )}
+            </div>
+
+            <div className="grid grid-cols-3 gap-1.5 py-1">
+              {[500000, 1000000, 2000000, 5000000].map(val => (
+                <button 
+                  key={val}
+                  type="button"
+                  onClick={() => setPaidAmount(val)}
+                  className="py-1.5 border border-slate-200 rounded text-[11px] font-semibold text-slate-600 hover:bg-slate-50 transition-colors shadow-sm bg-white"
+                >
+                  {formatNumber(val)}
+                </button>
+              ))}
+              <button 
+                type="button"
+                onClick={() => setPaidAmount(finalTotal)} 
+                className="col-span-2 py-1.5 border border-blue-200 bg-blue-50 rounded text-[11px] font-semibold text-blue-600 hover:bg-blue-100 transition-all text-center shadow-sm"
+              >
+                Đúng số tiền
+              </button>
             </div>
             
             <div className="flex justify-between items-center pt-2 border-t border-slate-100">
               <span className="text-sm font-bold text-red-600">Còn nợ NCC</span>
-              <span className="text-base font-bold text-red-600">{formatNumber(finalTotal - paidAmount)}</span>
+              <span className="text-base font-bold text-red-600">{formatNumber(Math.max(0, finalTotal - paidAmount))}</span>
             </div>
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-1.5">
@@ -1091,7 +1114,7 @@ export const Import: React.FC = () => {
         </div>
 
         {/* Action Buttons */}
-        <div className="p-4 grid grid-cols-2 gap-3 bg-slate-50">
+        <div className="p-4 grid grid-cols-2 gap-3 bg-slate-50 mt-auto border-t border-slate-100 shrink-0">
           <button className="py-3 px-4 rounded-xl font-bold text-sm text-blue-600 bg-white border border-blue-200 hover:bg-blue-50 transition-all active:scale-95 shadow-sm">
             Lưu tạm
           </button>
@@ -1327,6 +1350,28 @@ export const Import: React.FC = () => {
                   <span className="text-xs font-medium text-rose-500 italic">Chọn ví</span>
                 )}
               </div>
+
+              {walletId && (
+                <div className="grid grid-cols-3 gap-1.5 py-1">
+                  {[500000, 1000000, 2000000, 5000000].map(val => (
+                    <button 
+                      key={val}
+                      type="button"
+                      onClick={() => setPaidAmount(val)}
+                      className="py-1.5 border border-slate-200 rounded text-[11px] font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                    >
+                      {formatNumber(val)}
+                    </button>
+                  ))}
+                  <button 
+                    type="button"
+                    onClick={() => setPaidAmount(finalTotal)} 
+                    className="col-span-2 py-1.5 border border-blue-200 bg-blue-50 rounded text-[11px] font-semibold text-blue-600 hover:bg-blue-100 transition-all text-center"
+                  >
+                    Đúng số tiền
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
