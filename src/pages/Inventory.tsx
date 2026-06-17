@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, Plus, Box, Wrench, Barcode, X, ArrowDownLeft, ArrowUpRight, FileText, Calendar, User, Package, CreditCard, Truck, Star, Settings, HelpCircle, LayoutGrid, Download, Upload, ChevronDown, Filter, Edit3, Image as ImageIcon, RotateCcw, ExternalLink, Printer, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Product, Invoice, ImportOrder, ReturnImportOrder, ReturnSalesOrder } from '../types';
-import { formatNumber, parseFormattedNumber, formatDateTime } from '../lib/utils';
+import { formatNumber, parseFormattedNumber, formatDateTime, parseDateString } from '../lib/utils';
 import { generateId } from '../lib/idUtils';
 import { useScrollLock } from '../hooks/useScrollLock';
 import { useMobileBackModal } from '../hooks/useMobileBackModal';
@@ -305,7 +305,7 @@ return (
     
     // Derived from sources of truth
     const importHistory = importOrders.flatMap(order => 
-      (order.items || []).filter(item => item.id === selectedProduct.id).map(item => ({
+      (Array.isArray(order.items) ? order.items : []).filter(item => item.id === selectedProduct.id).map(item => ({
         prodId: item.id,
         type: 'NHAP' as const,
         qty: Number(item.qty) || 0,
@@ -318,7 +318,7 @@ return (
     );
     
     const invoiceHistory = invoices.flatMap(inv => 
-      (inv.items || []).filter(item => item.id === selectedProduct.id).map(item => ({
+      (Array.isArray(inv.items) ? inv.items : []).filter(item => item.id === selectedProduct.id).map(item => ({
         prodId: item.id,
         type: 'XUAT' as const,
         qty: Number(item.qty) || 0,
@@ -331,7 +331,7 @@ return (
     );
 
     const returnImportHistory = returnImportOrders.flatMap(order => 
-      (order.items || []).filter(item => item.id === selectedProduct.id).map(item => ({
+      (Array.isArray(order.items) ? order.items : []).filter(item => item.id === selectedProduct.id).map(item => ({
         prodId: item.id,
         type: 'TRA_NHAP' as const,
         qty: Number(item.qty) || 0,
@@ -344,7 +344,7 @@ return (
     );
 
     const returnSalesHistory = returnSalesOrders.flatMap(order => 
-      (order.items || []).filter(item => item.id === selectedProduct.id).map(item => ({
+      (Array.isArray(order.items) ? order.items : []).filter(item => item.id === selectedProduct.id).map(item => ({
         prodId: item.id,
         type: 'TRA_BAN' as const,
         qty: Number(item.qty) || 0,
@@ -379,7 +379,7 @@ return (
 
     const history = [...importHistory, ...invoiceHistory, ...returnImportHistory, ...returnSalesHistory, ...adjustments];
     
-    return history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return history.sort((a, b) => parseDateString(b.date) - parseDateString(a.date));
   }, [selectedProduct, stockCards, importOrders, invoices, returnImportOrders, returnSalesOrders]);
 
   const handleRefClick = (refId: string) => {

@@ -130,7 +130,7 @@ export const Serials: React.FC = () => {
       });
     }
 
-    return history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return history.sort((a, b) => parseDateString(b.date) - parseDateString(a.date));
   };
 
   useMobileBackModal(!!selectedSerial, () => setSelectedSerial(null));

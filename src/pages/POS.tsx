@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, Plus, UserPlus, UserCircle, CheckCircle, Check, X, Trash2, Printer, Barcode, ChevronDown, Edit3, PieChart, ShoppingCart, Tag, Image as ImageIcon, ArrowLeft, Info, FileText, Wallet } from 'lucide-react';
+import { Search, Plus, UserPlus, UserCircle, CheckCircle, Check, X, Trash2, Printer, Barcode, ChevronDown, Edit3, PieChart, ShoppingCart, Tag, Image as ImageIcon, ArrowLeft, Info, FileText, Wallet, RefreshCw } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Product, InvoiceItem, Customer, CashTransaction } from '../types';
-import { formatNumber, parseFormattedNumber, formatDateTime, parseDateString, smartParseDate } from '../lib/utils';
+import { formatNumber, parseFormattedNumber, formatDateTime, parseDateString, smartParseDate, formatDate, formatDateTime12h } from '../lib/utils';
 import { generateId } from '../lib/idUtils';
 import { NumericFormat } from 'react-number-format';
 import { PrintTemplate } from '../components/PrintTemplate';
 import { ProductDetailModal } from '../components/ProductDetailModal';
 import { AddCustomerModal } from '../components/AddCustomerModal';
+import { DateTimePicker } from '../components/DateTimePicker';
 import { useScrollLock } from '../hooks/useScrollLock';
 import { useMobileBackModal } from '../hooks/useMobileBackModal';
 import { useEscapeKey } from '../hooks/useEscapeKey';
@@ -16,7 +17,7 @@ import { useEscapeKey } from '../hooks/useEscapeKey';
 export const POS: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { products, customers, invoices, cashTransactions, addInvoice, updateInvoice, deleteInvoice, addCustomer, updateProduct, serials, addStockCard, addCashTransaction, posDraft, setPOSDraft, returnSalesOrders, tasks, updateTask, wallets } = useAppContext();
+  const { products, customers, invoices, cashTransactions, addInvoice, updateInvoice, deleteInvoice, addCustomer, updateProduct, serials, addStockCard, addCashTransaction, posDraft, setPOSDraft, returnSalesOrders, tasks, updateTask, wallets, syncData, isSyncing } = useAppContext();
   const [searchTerm, setSearchTerm] = useState('');
   const [viewingProduct, setViewingProduct] = useState<Product | null>(null);
   
@@ -118,6 +119,25 @@ export const POS: React.FC = () => {
     setTabs(prev => prev.map((t, i) => i === activeTab ? { ...t, ...updates } : t));
   };
 
+  const handleRefreshInvoiceId = async () => {
+    if (syncData) {
+      try {
+        await syncData(true);
+      } catch (e) {
+        console.error("Failed to sync during manual refresh", e);
+      }
+    }
+    const otherTabs = tabs.filter((_, i) => i !== activeTab);
+    const allExistingItems = [
+      ...invoices.map(inv => ({ id: inv.id })),
+      ...otherTabs.map(tab => ({ id: tab.editingInvoiceId || tab.name }))
+    ];
+    const nextInvoiceId = generateId('HDN', allExistingItems);
+    if (!currentTab.editingInvoiceId) {
+      updateCurrentTab({ name: nextInvoiceId });
+    }
+  };
+
   // Handle Edit Invoice navigation when POS is already mounted
   useEffect(() => {
     const editInvoice = location.state?.editInvoice;
@@ -211,17 +231,33 @@ export const POS: React.FC = () => {
     }
   }, [location.search, customers, note]);
 
-  // Refresh date for empty new tabs when switching to them or clearing cart
+  // Refresh date and Invoice ID for empty new tabs when switching to them, clearing cart, or invoices update
   useEffect(() => {
     if (!editingInvoiceId && cart.length === 0) {
       const now = new Date();
       const freshDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      
+      const otherTabs = tabs.filter((_, i) => i !== activeTab);
+      const allExistingItems = [
+        ...invoices.map(inv => ({ id: inv.id })),
+        ...otherTabs.map(tab => ({ id: tab.editingInvoiceId || tab.name }))
+      ];
+      const nextInvoiceId = generateId('HDN', allExistingItems);
+      
+      const updates: Partial<typeof currentTab> = {};
       if (date !== freshDate) {
-        updateCurrentTab({ date: freshDate });
+        updates.date = freshDate;
+      }
+      if (currentTab.name !== nextInvoiceId) {
+        updates.name = nextInvoiceId;
+      }
+      
+      if (Object.keys(updates).length > 0) {
+        updateCurrentTab(updates);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, editingInvoiceId, cart.length]); 
+  }, [activeTab, editingInvoiceId, cart.length, invoices]); 
 
   const setCart = (newCart: any) => {
     const nextCart = typeof newCart === 'function' ? newCart(cart) : newCart;
@@ -596,7 +632,7 @@ return (
           if (p?.warrantyMonths) {
             const expiryDate = new Date();
             expiryDate.setMonth(expiryDate.getMonth() + p.warrantyMonths);
-            warrantyExpiry = expiryDate.toLocaleDateString('vi-VN');
+            warrantyExpiry = formatDate(expiryDate);
           }
           return {
             id: item.id,
@@ -631,7 +667,7 @@ return (
         addCashTransaction(newTransaction);
       }
 
-      const savedInvoice = await addInvoice(invoice as any);
+      const savedInvoice = await addInvoice(invoice as any, isEdit);
       
       if (autoPrint && savedInvoice) {
         handlePrint({
@@ -988,9 +1024,22 @@ return (
           <div className="p-4 flex flex-col gap-4 overflow-y-auto flex-1">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-2">
                <h3 className="text-sm font-bold text-slate-800">Mã Chứng Từ</h3>
-               <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-100">
-                 {currentTab.editingInvoiceId || currentTab.name}
-               </span>
+               <div className="flex items-center gap-1.5 animate-in fade-in duration-350">
+                 <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-100 font-mono">
+                   {currentTab.editingInvoiceId || currentTab.name}
+                 </span>
+                 {!currentTab.editingInvoiceId && (
+                   <button 
+                     type="button"
+                     onClick={handleRefreshInvoiceId}
+                     disabled={isSyncing}
+                     title="Đồng bộ & cập nhật mã mới nhất"
+                     className="p-1 hover:bg-slate-100 active:bg-slate-200 rounded text-slate-500 hover:text-blue-600 transition-colors disabled:opacity-50"
+                   >
+                     <RefreshCw size={14} className={isSyncing ? "animate-spin" : ""} />
+                   </button>
+                 )}
+               </div>
             </div>
 
             {/* Customer Selection */}
@@ -1062,12 +1111,7 @@ return (
             <div className="space-y-4 py-4 border-t border-slate-100">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-slate-600 font-medium">Thời gian</span>
-                <input 
-                  type="datetime-local"
-                  value={date}
-                  onChange={(e) => setTransactionDate(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs font-bold outline-none focus:border-blue-500"
-                />
+                <DateTimePicker value={date} onChange={setTransactionDate} />
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-slate-600 font-medium">Tổng tiền hàng</span>
@@ -1190,8 +1234,26 @@ return (
           <button onClick={() => navigate(-1)} className="text-slate-500">
             <X size={24} />
           </button>
-          <h1 className="flex-1 text-lg font-bold text-slate-800">Bán hàng</h1>
-          <button className="text-slate-500">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-base font-black text-slate-800 leading-tight">Bán hàng</h1>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-[11px] font-mono font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 inline-block truncate">
+                Mã: {currentTab.editingInvoiceId || currentTab.name}
+              </span>
+              {!currentTab.editingInvoiceId && (
+                <button 
+                  type="button"
+                  onClick={handleRefreshInvoiceId}
+                  disabled={isSyncing}
+                  title="Đồng bộ & cập nhật mã mới và mới nhất"
+                  className="p-1 bg-slate-100 active:bg-slate-200 rounded text-slate-600 transition-colors disabled:opacity-50 flex items-center justify-center shrink-0"
+                >
+                  <RefreshCw size={11} className={isSyncing ? "animate-spin" : ""} />
+                </button>
+              )}
+            </div>
+          </div>
+          <button className="text-slate-500 shrink-0">
             <Info size={24} />
           </button>
         </div>
@@ -1727,10 +1789,28 @@ return (
         <div className="fixed inset-0 z-[500] bg-slate-50 flex flex-col md:hidden">
           <div className="flex items-center p-4 border-b border-slate-200 bg-white shadow-sm gap-3">
             <button onClick={() => setIsMobileCheckoutOpen(false)} className="text-slate-500">
-              <ChevronDown size={24} className="rotate-90" />
+              <ChevronDown size={24} className="rotate-95" />
             </button>
-            <h2 className="text-lg font-bold text-slate-800 flex-1">Thanh toán</h2>
-            <div className="flex gap-4 text-slate-500">
+            <div className="flex-1 min-w-0">
+              <h2 className="text-base font-black text-slate-800 leading-tight">Thanh toán</h2>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-[11px] font-mono font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 inline-block truncate">
+                  Mã: {currentTab.editingInvoiceId || currentTab.name}
+                </span>
+                {!currentTab.editingInvoiceId && (
+                  <button 
+                    type="button"
+                    onClick={handleRefreshInvoiceId}
+                    disabled={isSyncing}
+                    title="Đồng bộ & cập nhật mã mới nhất"
+                    className="p-1 bg-slate-100 active:bg-slate-200 rounded text-slate-600 transition-colors disabled:opacity-50 flex items-center justify-center shrink-0"
+                  >
+                    <RefreshCw size={11} className={isSyncing ? "animate-spin" : ""} />
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-4 text-slate-500 shrink-0">
               <Printer size={20} />
             </div>
           </div>
@@ -1761,12 +1841,7 @@ return (
             <div className="bg-white p-4 space-y-4 shadow-sm">
               <div className="flex justify-between items-center bg-slate-50 p-2 rounded-lg border border-slate-100">
                 <span className="text-sm font-bold text-slate-800">Thời gian</span>
-                <input 
-                  type="datetime-local"
-                  value={date}
-                  onChange={(e) => setTransactionDate(e.target.value)}
-                  className="bg-white border border-slate-200 rounded px-2 py-1 text-xs font-bold outline-none focus:border-blue-500"
-                />
+                <DateTimePicker value={date} onChange={setTransactionDate} />
               </div>
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2">

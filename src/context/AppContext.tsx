@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback, useRef } from 'react';
 import { AppState, Product, Customer, Supplier, Invoice, ImportOrder, CashTransaction, POSDraft, ImportDraft, MaintenanceRecord, MaintenanceTransfer, ReturnImportOrder, ReturnSalesOrder, User, Serial, StockCard, PrintSettings, ExternalSerial, ImageItem, Task, TelegramSettings, WifiRecord, CameraAccountRecord, CameraInstallation, Wallet } from '../types';
 import { apiService } from '../services/api';
-import { generateId } from '../lib/idUtils';
+import { generateId, resolveIdCollision } from '../lib/idUtils';
 import { formatDateTime, padPhone, formatSnForDb, parseSnFromDb, parseFormattedNumber } from '../lib/utils';
 import { sendNotification, sendTelegramMessage } from '../lib/notification';
 
@@ -13,7 +13,7 @@ interface AppContextProps extends AppState {
   addCustomer: (customer: Customer) => Customer;
   updateCustomer: (id: string, updates: Partial<Customer>) => void;
   addSupplier: (supplier: Supplier) => void;
-  addInvoice: (invoice: Invoice) => void;
+  addInvoice: (invoice: Invoice, isExplicitEdit?: boolean) => Promise<Invoice>;
   updateInvoice: (id: string, updates: Partial<Invoice>) => void;
   deleteInvoice: (id: string) => void;
   addImportOrder: (order: ImportOrder) => void;
@@ -226,7 +226,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       ] = await Promise.all([fetchGroup1, fetchGroup2, fetchGroup3, fetchGroup4, fetchGroup5]);
 
 
-        const mappedProducts = apiProducts.length > 0 ? apiProducts.map((p: any) => ({
+        const validApiProducts = (apiProducts || []).filter((p: any) => p && p.id && String(p.id).trim() !== '');
+        const mappedProducts = validApiProducts.length > 0 ? validApiProducts.map((p: any) => ({
           id: String(p.id || ''),
           name: String(p.name || ''),
           price: parseFormattedNumber(p.salePrice),
@@ -308,7 +309,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           return [];
         };
 
-        const mappedInvoices = apiInvoices.length > 0 ? apiInvoices.map((inv: any) => {
+        const validApiInvoices = (apiInvoices || []).filter((inv: any) => inv && inv.id && String(inv.id).trim() !== '');
+        const mappedInvoices = validApiInvoices.length > 0 ? validApiInvoices.map((inv: any) => {
             const total = parseFormattedNumber(inv.finalAmount || inv.total || 0);
             const paid = parseFormattedNumber(inv.paidAmount || inv.paid || 0);
             const debt = inv.debt !== undefined ? parseFormattedNumber(inv.debt) : (total - paid);
@@ -332,7 +334,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             };
           }) : [];
 
-        const mappedReturnSales = apiReturnSales.length > 0 ? apiReturnSales.map((ret: any) => {
+        const validApiReturnSales = (apiReturnSales || []).filter((ret: any) => ret && ret.id && String(ret.id).trim() !== '');
+        const mappedReturnSales = validApiReturnSales.length > 0 ? validApiReturnSales.map((ret: any) => {
             return {
               id: String(ret.id || ''),
               date: formatDateTime(ret.createdAt || ret.date),
@@ -347,7 +350,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             };
           }) : [];
 
-        const mappedReturnImports = apiReturnImports.length > 0 ? apiReturnImports.map((ret: any) => {
+        const validApiReturnImports = (apiReturnImports || []).filter((ret: any) => ret && ret.id && String(ret.id).trim() !== '');
+        const mappedReturnImports = validApiReturnImports.length > 0 ? validApiReturnImports.map((ret: any) => {
             return {
               id: String(ret.id || ''),
               date: formatDateTime(ret.createdAt || ret.date),
@@ -362,7 +366,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             };
           }) : [];
 
-        const mappedImports = apiImports.length > 0 ? apiImports.map((imp: any) => {
+        const validApiImports = (apiImports || []).filter((imp: any) => imp && imp.id && String(imp.id).trim() !== '');
+        const mappedImports = validApiImports.length > 0 ? validApiImports.map((imp: any) => {
           const total = parseFormattedNumber(imp.totalAmount || imp.total || 0);
           const paid = parseFormattedNumber(imp.paidAmount || imp.paid || 0);
           // Calculate debt based on total and paid, ignore the debt field from API if it's 0 but total > paid
@@ -471,38 +476,44 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         const mergedSerials = Array.from(serialsBySn.values());
 
-        setState(prev => ({
-          ...prev,
-          products: mappedProducts,
-          brands: apiBrands.length > 0 ? apiBrands.map((b: any) => ({
-            id: String(b.id || ''),
-            name: String(b.name || '')
-          })) : [],
-          categories: apiCategories.length > 0 ? apiCategories.map((c: any) => ({
-            id: String(c.id || ''),
-            name: String(c.name || '')
-          })) : [],
-          customers: apiCustomers.length > 0 ? apiCustomers.map((c: any) => ({
-            id: String(c.id || ''),
-            name: String(c.name || ''),
-            phone: padPhone(c.phone),
-            phone2: padPhone(c.phone2),
-            address: String(c.address || ''),
-            location: String(c.location || ''),
-            note: String(c.note || ''),
-            createdBy: String(c.createdBy || ''),
-            createdAt: String(c.createdAt || ''),
-            totalSpent: parseFormattedNumber(c.totalSpent),
-            debt: parseFormattedNumber(c.debt),
-            image: String(c.image || '')
-          })) : [],
-          suppliers: apiSuppliers.length > 0 ? apiSuppliers.map((s: any) => ({
-            id: String(s.id || ''),
-            name: String(s.name || ''),
-            phone: padPhone(s.phone),
-            address: String(s.address || ''),
-            totalDebt: parseFormattedNumber(s.debt)
-          })) : [],
+        setState(prev => {
+          const validApiBrands = (apiBrands || []).filter((b: any) => b && b.id && String(b.id).trim() !== '');
+          const validApiCategories = (apiCategories || []).filter((c: any) => c && c.id && String(c.id).trim() !== '');
+          const validApiCustomers = (apiCustomers || []).filter((c: any) => c && c.id && String(c.id).trim() !== '');
+          const validApiSuppliers = (apiSuppliers || []).filter((s: any) => s && s.id && String(s.id).trim() !== '');
+
+          return {
+            ...prev,
+            products: mappedProducts,
+            brands: validApiBrands.length > 0 ? validApiBrands.map((b: any) => ({
+              id: String(b.id || ''),
+              name: String(b.name || '')
+            })) : [],
+            categories: validApiCategories.length > 0 ? validApiCategories.map((c: any) => ({
+              id: String(c.id || ''),
+              name: String(c.name || '')
+            })) : [],
+            customers: validApiCustomers.length > 0 ? validApiCustomers.map((c: any) => ({
+              id: String(c.id || ''),
+              name: String(c.name || ''),
+              phone: padPhone(c.phone),
+              phone2: padPhone(c.phone2),
+              address: String(c.address || ''),
+              location: String(c.location || ''),
+              note: String(c.note || ''),
+              createdBy: String(c.createdBy || ''),
+              createdAt: String(c.createdAt || ''),
+              totalSpent: parseFormattedNumber(c.totalSpent),
+              debt: parseFormattedNumber(c.debt),
+              image: String(c.image || '')
+            })) : [],
+            suppliers: validApiSuppliers.length > 0 ? validApiSuppliers.map((s: any) => ({
+              id: String(s.id || ''),
+              name: String(s.name || ''),
+              phone: padPhone(s.phone),
+              address: String(s.address || ''),
+              totalDebt: parseFormattedNumber(s.debt)
+            })) : [],
           serials: mergedSerials,
           stockCards: apiStockCards.length > 0 ? apiStockCards.map((c: any) => {
             const snVal = parseSnFromDb(c.sn);
@@ -673,7 +684,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           })(),
           isSyncing: false,
           lastSync: new Date().toISOString()
-        }));
+        };
+      });
       } catch (error) {
         console.error("Failed to load data from Google Sheets:", error);
         setState(prev => ({ ...prev, isSyncing: false }));
@@ -963,11 +975,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
   };
 
-  const addInvoice = async (invoice: Invoice) => {
+  const addInvoice = async (invoice: Invoice, isExplicitEdit?: boolean) => {
     // Check if this is an update or a new invoice using the freshest stateRef to prevent duplicates
-    const currentInvoices = stateRef.current.invoices || [];
-    const existingInvoice = currentInvoices.find(inv => inv.id === invoice.id);
-    const isUpdate = !!existingInvoice;
+    let currentInvoices = stateRef.current.invoices || [];
+    let isFetchedFresh = false;
+    
+    // For new invoices, we query the live Google Sheet directly to make sure we don't miss records created concurrently on other devices
+    if (!isExplicitEdit) {
+      try {
+        const freshInvoices = await apiService.readSheet('Invoices', true);
+        if (freshInvoices && freshInvoices.length > 0) {
+          currentInvoices = freshInvoices;
+          isFetchedFresh = true;
+          console.log(`[ID Pre-Check] Fetched ${freshInvoices.length} live invoices from Google Sheet to ensure no ID duplicate.`);
+        }
+      } catch (e) {
+        console.warn("Failed to fetch fresh invoices from Google Sheet, falling back to local state:", e);
+      }
+    }
+    
+    // Resolve ID collision if it's not explicitly an edit but proposed ID already exists
+    let finalId = invoice.id || generateId('HDN', currentInvoices);
+    const resolvedIsUpdate = isExplicitEdit !== undefined ? isExplicitEdit : !!currentInvoices.find(inv => inv.id === finalId);
+    
+    if (!resolvedIsUpdate && currentInvoices.some(inv => inv.id === finalId)) {
+      const resolvedId = resolveIdCollision(finalId, currentInvoices.map(inv => inv.id));
+      console.log(`[ID Collision] Auto-incremented proposed ID ${finalId} to unique ${resolvedId}`);
+      finalId = resolvedId;
+    }
+    
+    const isUpdate = resolvedIsUpdate;
+    const existingInvoice = isUpdate ? (stateRef.current.invoices || []).find(inv => inv.id === finalId) : null;
 
     // Find current customer to get old debt
     const customer = (stateRef.current.customers || []).find(c => c.name === invoice.customer);
@@ -976,9 +1014,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const newInvoice = {
       ...invoice,
-      id: invoice.id || generateId('HDN', currentInvoices),
-      oldDebt: isUpdate ? (existingInvoice.oldDebt || 0) : oldDebt,
-      totalDebt: isUpdate ? (existingInvoice.oldDebt || 0) + invoice.debt : totalDebt
+      id: finalId,
+      oldDebt: isUpdate && existingInvoice ? (existingInvoice.oldDebt || 0) : oldDebt,
+      totalDebt: isUpdate && existingInvoice ? (existingInvoice.oldDebt || 0) + invoice.debt : totalDebt
     };
 
     // Optimistic update
@@ -1013,6 +1051,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       // Find original cash/wallet transaction to modify if needed
       let updatedCashTransactions = prev.cashTransactions || [];
+      
+      // If we resolved the ID conflict from old ID to new ID, fix up pre-added transaction in local state
+      if (!isUpdate && invoice.id && invoice.id !== finalId) {
+        updatedCashTransactions = updatedCashTransactions.map(t => {
+          if (t.refId === invoice.id && t.category === 'SALES_REVENUE') {
+            return {
+              ...t,
+              refId: finalId,
+              note: t.note.replaceAll(invoice.id, finalId)
+            };
+          }
+          return t;
+        });
+      }
+      
       const txToUpdate = isUpdate ? updatedCashTransactions.find(t => t.refId === newInvoice.id && t.category === 'SALES_REVENUE') : null;
       if (txToUpdate) {
         updatedCashTransactions = updatedCashTransactions.map(t => 
@@ -1039,10 +1092,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return { ...p, stock: newStock };
       });
 
-      // Filter out old invoice if updating
-      const otherInvoices = isUpdate 
-        ? prev.invoices.filter(inv => inv.id !== newInvoice.id)
-        : (prev.invoices || []);
+      // Filter out old invoice from the parsed list
+      const otherInvoices = (prev.invoices || []).filter(inv => inv.id !== newInvoice.id);
 
       return { 
         ...prev, 
@@ -1095,6 +1146,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           }
         } else {
           await apiService.createRecord('Invoices', syncData);
+          
+          // If we resolved duplicate conflict from old ID to new ID, also find and update the cash ledger entry that was written earlier in Google Sheets
+          if (invoice.id && invoice.id !== finalId) {
+            const cashTx = stateRef.current.cashTransactions.find(t => t.refId === finalId && t.category === 'SALES_REVENUE');
+            if (cashTx) {
+              await apiService.updateRecord('CashLedger', cashTx.id, { 
+                referenceId: finalId,
+                note: cashTx.note
+              });
+            }
+          }
         }
 
         // Handle Details and Stock updates

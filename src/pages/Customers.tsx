@@ -3,7 +3,7 @@ import { Search, UserPlus, User, X, FileText, Calendar, Wallet, ChevronRight, Cr
 import { useAppContext } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import { Customer, Invoice, CashTransaction, MaintenanceRecord, Task, WifiRecord, CameraAccountRecord, CameraInstallation } from '../types';
-import { formatNumber, parseFormattedNumber, formatDateTime, parseDateString, handlePhoneCall } from '../lib/utils';
+import { formatNumber, parseFormattedNumber, formatDateTime, parseDateString, handlePhoneCall, formatDate } from '../lib/utils';
 import { generateId } from '../lib/idUtils';
 import { PrintTemplate } from '../components/PrintTemplate';
 import { ImageLibraryModal } from '../components/ImageLibraryModal';
@@ -1655,7 +1655,7 @@ return (
                               ) : (
                                 customerInstallations.map(inst => {
                                   const formattedDate = inst.installationDate 
-                                    ? new Date(inst.installationDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) 
+                                    ? formatDate(inst.installationDate) 
                                     : '---';
                                   return (
                                     <div key={inst.id} onClick={() => setSelectedCameraInstall(inst)} className="bg-white border text-[12px] border-slate-100 rounded p-2.5 shadow-sm cursor-pointer hover:bg-slate-50 hover:border-blue-200 transition-colors">
@@ -1982,7 +1982,7 @@ return (
                 </div>
                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Ngày lắp đặt</div>
-                   <div className="font-bold text-slate-800 text-[14px]">{selectedCameraInstall.installationDate ? new Date(selectedCameraInstall.installationDate).toLocaleDateString('vi-VN') : '---'}</div>
+                   <div className="font-bold text-slate-800 text-[14px]">{selectedCameraInstall.installationDate ? formatDate(selectedCameraInstall.installationDate) : '---'}</div>
                 </div>
               </div>
 

@@ -2,11 +2,10 @@ import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Wallet } from '../types';
 import { Plus, ArrowLeftRight, Activity, X, Wallet as WalletIcon, Landmark, CreditCard, Smartphone, Coins, PiggyBank, Briefcase, Pencil, History, Image as ImageIcon } from 'lucide-react';
-import { formatNumber } from '../lib/utils';
+import { formatNumber, formatDateTime, parseDateString } from '../lib/utils';
 import { generateId } from '../lib/idUtils';
 import { ImageLibraryModal } from '../components/ImageLibraryModal';
 import { useMobileBackModal } from '../hooks/useMobileBackModal';
-import { formatDateTime } from '../lib/utils';
 
 const AVAILABLE_ICONS: Record<string, React.FC<any>> = {
   Wallet: WalletIcon,
@@ -326,7 +325,7 @@ export const WalletManagement: React.FC = () => {
                 <tbody className="divide-y divide-slate-100">
                   {cashTransactions
                     .filter(t => t.walletId && (selectedWalletFilter === 'ALL' || t.walletId === selectedWalletFilter))
-                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                    .sort((a, b) => parseDateString(b.date) - parseDateString(a.date))
                     .map((t, idx) => {
                     const wallet = wallets.find(w => w.id === t.walletId);
                   return (

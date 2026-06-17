@@ -269,7 +269,7 @@ const Users: React.FC = () => {
       {/* User Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 md:p-4 bg-slate-900/50 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-md md:rounded-xl rounded-none shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col h-full md:h-auto">
+          <div className="bg-white w-full sm:max-w-xl md:max-w-3xl md:rounded-xl rounded-none shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col h-full md:h-auto">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
               <h3 className="text-lg font-black text-slate-800 tracking-tight uppercase">
                 {editingUser ? 'Sửa người dùng' : 'Thêm người dùng mới'}

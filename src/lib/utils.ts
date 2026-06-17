@@ -32,35 +32,55 @@ export const smartParseDate = (dateStr: any): Date => {
   if (dateStr instanceof Date) return dateStr;
   
   const str = String(dateStr);
+  let year = 0, month = 0, day = 0;
+  let hours = 0, minutes = 0, seconds = 0;
+  let isIso = false;
+
   // Handle ISO format
   if (str.includes('T') || /^\d{4}-\d{2}-\d{2}/.test(str)) {
     const d = new Date(str);
-    if (!isNaN(d.getTime())) return d;
+    if (!isNaN(d.getTime())) {
+      year = d.getFullYear();
+      month = d.getMonth() + 1;
+      day = d.getDate();
+      hours = d.getHours();
+      minutes = d.getMinutes();
+      seconds = d.getSeconds();
+      isIso = true;
+    }
   }
 
-  const tokens = str.split(/[\s,T]+/);
-  // Find date part and time part
-  const datePart = tokens.find(t => t.includes('/') || t.includes('-')) || tokens[0];
-  const timePart = tokens.find(t => t.includes(':')) || (tokens.length > 1 ? tokens[1] : '00:00:00');
+  if (!isIso) {
+    const tokens = str.split(/[\s,T]+/);
+    // Find date part and time part
+    const datePart = tokens.find(t => t.includes('/') || t.includes('-')) || tokens[0];
+    const timePart = tokens.find(t => t.includes(':')) || (tokens.length > 1 ? tokens[1] : '00:00:00');
 
-  let year = 0, month = 0, day = 0;
-  let sep = datePart.includes('/') ? '/' : '-';
-  const parts = datePart.split(sep);
-  
-  if (parts.length === 3) {
-    if (parts[0].length === 4) { // YYYY/MM/DD
-      year = parseInt(parts[0]);
-      month = parseInt(parts[1]);
-      day = parseInt(parts[2]);
-    } else if (parts[2].length === 4) { // DD/MM/YYYY
-      year = parseInt(parts[2]);
-      month = parseInt(parts[1]);
-      day = parseInt(parts[0]);
-    } else if (parts[0].length <= 2 && parts[1].length <= 2 && parts[2].length === 2) {
-      // Handle Short year formats (not recommended but possible)
-      year = 2000 + parseInt(parts[2]);
-      month = parseInt(parts[1]);
-      day = parseInt(parts[0]);
+    let sep = datePart.includes('/') ? '/' : '-';
+    const parts = datePart.split(sep);
+    
+    if (parts.length === 3) {
+      if (parts[0].length === 4) { // YYYY/MM/DD
+        year = parseInt(parts[0]);
+        month = parseInt(parts[1]);
+        day = parseInt(parts[2]);
+      } else if (parts[2].length === 4) { // DD/MM/YYYY
+        year = parseInt(parts[2]);
+        month = parseInt(parts[1]);
+        day = parseInt(parts[0]);
+      } else if (parts[0].length <= 2 && parts[1].length <= 2 && parts[2].length === 2) {
+        // Handle Short year formats (not recommended but possible)
+        year = 2000 + parseInt(parts[2]);
+        month = parseInt(parts[1]);
+        day = parseInt(parts[0]);
+      }
+    }
+
+    if (timePart) {
+      const tParts = timePart.split(':');
+      hours = parseInt(tParts[0] || '0');
+      minutes = parseInt(tParts[1] || '0');
+      seconds = parseInt(tParts[2] || '0');
     }
   }
 
@@ -77,7 +97,7 @@ export const smartParseDate = (dateStr: any): Date => {
     day = temp;
   } 
   
-  let d = new Date(year, month - 1, day);
+  let d = new Date(year, month - 1, day, hours, minutes, seconds);
   
   // Kiểm tra hoán đổi tương lai
   const now = new Date();
@@ -85,18 +105,10 @@ export const smartParseDate = (dateStr: any): Date => {
   buffer.setDate(buffer.getDate() + 1);
   
   if (d.getTime() > buffer.getTime() && day <= 12 && month <= 12) {
-    const swapped = new Date(year, day - 1, month);
+    const swapped = new Date(year, day - 1, month, hours, minutes, seconds);
     if (swapped.getTime() <= buffer.getTime()) {
       d = swapped;
     }
-  }
-
-  // Thêm giờ
-  if (timePart) {
-    const tParts = timePart.split(':');
-    d.setHours(parseInt(tParts[0] || '0'));
-    d.setMinutes(parseInt(tParts[1] || '0'));
-    d.setSeconds(parseInt(tParts[2] || '0'));
   }
 
   return d;
@@ -116,6 +128,78 @@ export const formatDateTime = (dateStr?: string | number | Date) => {
     const yyyy = date.getFullYear();
 
     return `${dd}/${mo}/${yyyy} ${hh}:${mm}:${ss}`;
+  } catch (e) {
+    return String(dateStr);
+  }
+};
+
+export const formatDate = (dateStr?: string | number | Date) => {
+  if (!dateStr) return '';
+  try {
+    const date = smartParseDate(dateStr);
+    if (!date.getTime() || isNaN(date.getTime())) return String(dateStr);
+
+    const dd = date.getDate().toString().padStart(2, '0');
+    const mo = (date.getMonth() + 1).toString().padStart(2, '0');
+    const yyyy = date.getFullYear();
+
+    return `${dd}/${mo}/${yyyy}`;
+  } catch (e) {
+    return String(dateStr);
+  }
+};
+
+export const formatDateDayMonth = (dateStr?: string | number | Date) => {
+  if (!dateStr) return '';
+  try {
+    const date = smartParseDate(dateStr);
+    if (!date.getTime() || isNaN(date.getTime())) return String(dateStr);
+
+    const dd = date.getDate().toString().padStart(2, '0');
+    const mo = (date.getMonth() + 1).toString().padStart(2, '0');
+
+    return `${dd}/${mo}`;
+  } catch (e) {
+    return String(dateStr);
+  }
+};
+
+export const formatDateTime24h = (dateStr?: string | number | Date) => {
+  if (!dateStr) return '';
+  try {
+    const date = smartParseDate(dateStr);
+    if (!date.getTime() || isNaN(date.getTime())) return String(dateStr);
+
+    const dd = date.getDate().toString().padStart(2, '0');
+    const mo = (date.getMonth() + 1).toString().padStart(2, '0');
+    const yyyy = date.getFullYear();
+    const hh = date.getHours().toString().padStart(2, '0');
+    const mm = date.getMinutes().toString().padStart(2, '0');
+
+    return `${dd}/${mo}/${yyyy} ${hh}:${mm}`;
+  } catch (e) {
+    return String(dateStr);
+  }
+};
+
+export const formatDateTime12h = (dateStr?: string | number | Date) => {
+  if (!dateStr) return '';
+  try {
+    const date = smartParseDate(dateStr);
+    if (!date.getTime() || isNaN(date.getTime())) return String(dateStr);
+
+    let hours = date.getHours();
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const strHours = hours.toString().padStart(2, '0');
+
+    const dd = date.getDate().toString().padStart(2, '0');
+    const mo = (date.getMonth() + 1).toString().padStart(2, '0');
+    const yyyy = date.getFullYear();
+
+    return `${dd}/${mo}/${yyyy} ${strHours}:${minutes} ${ampm}`;
   } catch (e) {
     return String(dateStr);
   }

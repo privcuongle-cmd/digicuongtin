@@ -36,7 +36,7 @@ import {
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Task, TelegramSettings, Customer, Invoice, MaintenanceRecord, FeedbackEntry } from '../types';
-import { formatDateTime, parseDateString, smartParseDate, handlePhoneCall } from '../lib/utils';
+import { formatDateTime, parseDateString, smartParseDate, handlePhoneCall, formatDate } from '../lib/utils';
 import { generateId } from '../lib/idUtils';
 import { useMobileBackModal } from '../hooks/useMobileBackModal';
 import { AddCustomerModal } from '../components/AddCustomerModal';
@@ -192,7 +192,7 @@ export const Tasks: React.FC = () => {
       const diffInDays = Math.floor(diffInHours / 24);
       if (diffInDays < 30) return { text: `${diffInDays} ngày trước`, color };
       
-      return { text: date.toLocaleDateString('vi-VN'), color };
+      return { text: formatDate(date), color };
     } catch (e) {
       return { text: dateStr, color: 'text-slate-400' };
     }

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, UserPlus, Truck, X, FileText, Calendar, Wallet, ChevronRight, CreditCard, Package, Hash, Printer, Download, Upload, LayoutGrid, Settings, HelpCircle, ChevronDown, Filter, RotateCcw, ExternalLink, ChevronLeft } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Supplier, ImportOrder, CashTransaction } from '../types';
-import { formatNumber, parseFormattedNumber } from '../lib/utils';
+import { formatNumber, parseFormattedNumber, parseDateString } from '../lib/utils';
 import { generateId } from '../lib/idUtils';
 import { PrintTemplate } from '../components/PrintTemplate';
 import { useScrollLock } from '../hooks/useScrollLock';
@@ -86,7 +86,7 @@ export const Suppliers: React.FC = () => {
       avgPerOrder,
       paymentRate,
       lastOrder,
-      orders: orders.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      orders: orders.sort((a, b) => parseDateString(b.date) - parseDateString(a.date))
     };
   };
 
@@ -138,7 +138,7 @@ export const Suppliers: React.FC = () => {
       // FIFO: Sort by date ascending (oldest first)
       const ordersWithDebt = [...stats.orders]
         .filter(o => o.debt > 0)
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        .sort((a, b) => parseDateString(a.date) - parseDateString(b.date));
       
       ordersWithDebt.forEach(order => {
         if (remainingPayment <= 0) return;

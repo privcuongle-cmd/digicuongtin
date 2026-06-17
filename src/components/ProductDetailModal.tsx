@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { X, ArrowDownLeft, ArrowUpRight, Barcode, Search, Edit3, Image as ImageIcon, Wrench, Package, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Product, Invoice, ImportOrder, ReturnImportOrder, ReturnSalesOrder } from '../types';
-import { formatNumber } from '../lib/utils';
+import { formatNumber, parseDateString } from '../lib/utils';
 import { useMobileBackModal } from '../hooks/useMobileBackModal';
 
 interface ProductDetailModalProps {
@@ -30,7 +30,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
   const productStockHistory = useMemo(() => {
     const importHistory = importOrders.flatMap(order => 
-      (order.items || []).filter(item => item.id === product.id).map(item => ({
+      (Array.isArray(order.items) ? order.items : []).filter(item => item.id === product.id).map(item => ({
         prodId: item.id,
         type: 'NHAP' as const,
         qty: Number(item.qty) || 0,
@@ -43,7 +43,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     );
     
     const invoiceHistory = invoices.flatMap(inv => 
-      (inv.items || []).filter(item => item.id === product.id).map(item => ({
+      (Array.isArray(inv.items) ? inv.items : []).filter(item => item.id === product.id).map(item => ({
         prodId: item.id,
         type: 'XUAT' as const,
         qty: Number(item.qty) || 0,
@@ -56,7 +56,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     );
 
     const returnImportHistory = returnImportOrders.flatMap(order => 
-      (order.items || []).filter(item => item.id === product.id).map(item => ({
+      (Array.isArray(order.items) ? order.items : []).filter(item => item.id === product.id).map(item => ({
         prodId: item.id,
         type: 'TRA_NHAP' as const,
         qty: Number(item.qty) || 0,
@@ -69,7 +69,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     );
 
     const returnSalesHistory = returnSalesOrders.flatMap(order => 
-      (order.items || []).filter(item => item.id === product.id).map(item => ({
+      (Array.isArray(order.items) ? order.items : []).filter(item => item.id === product.id).map(item => ({
         prodId: item.id,
         type: 'TRA_BAN' as const,
         qty: Number(item.qty) || 0,
@@ -104,7 +104,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
     const history = [...importHistory, ...invoiceHistory, ...returnImportHistory, ...returnSalesHistory, ...adjustments];
     
-    return history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return history.sort((a, b) => parseDateString(b.date) - parseDateString(a.date));
   }, [product, stockCards, importOrders, invoices, returnImportOrders, returnSalesOrders]);
 
   const stockStats = useMemo(() => {

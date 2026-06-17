@@ -3,11 +3,12 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, Plus, Truck, CheckCircle, X, Trash2, Barcode, Printer, ArrowLeft, LayoutGrid, Eye, Info, ChevronDown, Edit2, ArrowRight, UserCircle, PieChart, FileText, Package, Image as ImageIcon } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Product, ImportItem, Supplier, CashTransaction, ImportOrder } from '../types';
-import { formatNumber, parseFormattedNumber } from '../lib/utils';
+import { formatNumber, parseFormattedNumber, formatDate, formatDateTime12h } from '../lib/utils';
 import { NumericFormat } from 'react-number-format';
 import { generateId } from '../lib/idUtils';
 import { PrintTemplate } from '../components/PrintTemplate';
 import { ProductDetailModal } from '../components/ProductDetailModal';
+import { DateTimePicker } from '../components/DateTimePicker';
 import { useScrollLock } from '../hooks/useScrollLock';
 import { useMobileBackModal } from '../hooks/useMobileBackModal';
 import { useEscapeKey } from '../hooks/useEscapeKey';
@@ -415,7 +416,7 @@ export const Import: React.FC = () => {
                 sn,
                 supplier: selectedSupplier.name,
                 importPrice: item.price,
-                date: now.toLocaleDateString('vi-VN'),
+                date: formatDate(now),
                 refId: importId,
                 status: 'AVAILABLE'
               });
@@ -965,12 +966,7 @@ export const Import: React.FC = () => {
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <div className="flex justify-between items-center">
             <span className="text-sm font-medium text-slate-600">Thời gian</span>
-            <input 
-              type="datetime-local"
-              value={transactionDate}
-              onChange={(e) => setTransactionDate(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs font-bold outline-none focus:border-blue-500"
-            />
+            <DateTimePicker value={transactionDate} onChange={setTransactionDate} />
           </div>
           <div className="flex justify-between items-center">
             <span className="text-sm font-medium text-slate-600">Mã phiếu nhập</span>
@@ -1267,12 +1263,7 @@ export const Import: React.FC = () => {
             <div className="bg-white p-4 space-y-4 shadow-sm">
               <div className="flex justify-between items-center sm:hidden">
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Thời gian</span>
-                <input 
-                  type="datetime-local"
-                  value={transactionDate}
-                  onChange={(e) => setTransactionDate(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[10px] font-bold outline-none focus:border-blue-400"
-                />
+                <DateTimePicker value={transactionDate} onChange={setTransactionDate} />
               </div>
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2">

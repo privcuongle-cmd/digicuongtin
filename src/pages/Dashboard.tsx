@@ -36,7 +36,7 @@ import {
   Layers
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { formatNumber, formatDateTime, smartParseDate } from '../lib/utils';
+import { formatNumber, formatDateTime, smartParseDate, formatDate, formatDateDayMonth } from '../lib/utils';
 import { useScrollLock } from '../hooks/useScrollLock';
 import { useMobileBackModal } from '../hooks/useMobileBackModal';
 import { 
@@ -94,19 +94,19 @@ export const Dashboard: React.FC = () => {
 
   const getRangeLabel = () => {
     const today = new Date();
-    const formatDate = (date: Date) => date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const formatLocal = (date: Date) => formatDate(date);
     
     switch (dateRange) {
       case 'today': 
-        return `Hôm nay, ${formatDate(today)}`;
+        return `Hôm nay, ${formatLocal(today)}`;
       case 'yesterday': 
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
-        return `Hôm qua, ${formatDate(yesterday)}`;
+        return `Hôm qua, ${formatLocal(yesterday)}`;
       case 'last_7_days': 
         const sevenDaysAgo = new Date(today);
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-        return `7 ngày qua (${formatDate(sevenDaysAgo)} - ${formatDate(today)})`;
+        return `7 ngày qua (${formatLocal(sevenDaysAgo)} - ${formatLocal(today)})`;
       case 'this_month': 
         return `Tháng này, T${today.getMonth() + 1}/${today.getFullYear()}`;
       case 'last_month': 
@@ -433,7 +433,7 @@ export const Dashboard: React.FC = () => {
     const totalOrders = filteredData.invoices.length;
     
     const grossCost = filteredData.invoices.reduce((sum, inv) => {
-      const items = inv.items || [];
+      const items = Array.isArray(inv.items) ? inv.items : [];
       return sum + items.reduce((iSum: number, item: any) => iSum + (item.importPriceTotal || ((item.qty || 0) * (item.importPrice || 0))), 0);
     }, 0);
 
@@ -441,7 +441,7 @@ export const Dashboard: React.FC = () => {
     const returnCount = filteredData.returns.length;
 
     const returnCost = filteredData.returns.reduce((sum, ret) => {
-      const items = ret.items || [];
+      const items = Array.isArray(ret.items) ? ret.items : [];
       return sum + items.reduce((iSum: number, item: any) => iSum + (item.importPriceTotal || ((item.qty || 0) * (item.importPrice || 0))), 0);
     }, 0);
 
@@ -494,7 +494,7 @@ export const Dashboard: React.FC = () => {
     const lastDays = [...Array(daysToShow)].map((_, i) => {
       const d = new Date();
       d.setDate(d.getDate() - (daysToShow - 1 - i));
-      return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+      return formatDateDayMonth(d);
     });
 
     const dataMap: Record<string, number> = {};
@@ -503,7 +503,7 @@ export const Dashboard: React.FC = () => {
     filteredData.invoices.forEach(inv => {
       if (!inv.date) return;
       const itemDate = parseDate(inv.date);
-      const dayMonth = itemDate.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+      const dayMonth = formatDateDayMonth(itemDate);
       if (dataMap[dayMonth] !== undefined) {
         dataMap[dayMonth] += (inv.total || 0);
       }
