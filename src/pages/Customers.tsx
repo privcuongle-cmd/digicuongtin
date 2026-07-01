@@ -1975,29 +1975,29 @@ return (
               </button>
             </div>
             <div className="p-4 md:p-6 flex-1 overflow-y-auto space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-4">
+                {selectedCameraInstall.productName && (
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                     <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tên thiết bị</div>
+                     <div className="font-bold text-slate-800 text-[14px]">{selectedCameraInstall.productName}</div>
+                  </div>
+                )}
+
                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Loại lắp đặt</div>
                    <div className="font-bold text-slate-800 text-[14px]">{selectedCameraInstall.installationType}</div>
                 </div>
+
                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Ngày lắp đặt</div>
                    <div className="font-bold text-slate-800 text-[14px]">{selectedCameraInstall.installationDate ? formatDate(selectedCameraInstall.installationDate) : '---'}</div>
                 </div>
-              </div>
 
-              {selectedCameraInstall.productName && (
-                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                   <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tên thiết bị</div>
-                   <div className="font-bold text-slate-800 text-[14px]">{selectedCameraInstall.productName}</div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-4">
                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Wifi kết nối</div>
                    <div className="font-bold text-slate-800 text-[14px]">{selectedCameraInstall.wifiName || '---'}</div>
                 </div>
+
                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tài khoản</div>
                    <div className="font-bold text-slate-800 text-[14px]">{selectedCameraInstall.accountName || '---'}</div>
