@@ -290,11 +290,6 @@ export const Tasks: React.FC = () => {
       return;
     }
 
-    if (!title.trim() && !editingTask) {
-      alert('Vui lòng nhập tên công việc!');
-      return;
-    }
-
     const customer = customers.find(c => c.id === customerId);
     // Use customer name as title or default to 'N/A'
     const finalTitle = customer ? customer.name : 'N/A';
