@@ -971,7 +971,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       address: newSupplier.address || '',
       totalBuy: 0,
       debt: 0,
-      createdAt: new Date().toISOString()
+      createdAt: formatDateTime(new Date())
     });
   };
 

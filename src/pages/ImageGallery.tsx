@@ -3,7 +3,7 @@ import { Search, Upload, Image as ImageIcon, Trash2, CheckCircle2, Loader2, Filt
 import { motion, AnimatePresence } from 'motion/react';
 import { useAppContext } from '../context/AppContext';
 import { ImageItem } from '../types';
-import { cn } from '../lib/utils';
+import { cn, smartParseDate } from '../lib/utils';
 
 export const ImageGallery: React.FC = () => {
   const { images, uploadImage, deleteImage } = useAppContext();
@@ -25,8 +25,8 @@ export const ImageGallery: React.FC = () => {
       const matchesCategory = selectedCategory === 'Tất cả' || img.category === selectedCategory;
       return matchesSearch && matchesCategory;
     }).sort((a, b) => {
-      const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-      const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      const timeA = a.timestamp ? smartParseDate(a.timestamp).getTime() : 0;
+      const timeB = b.timestamp ? smartParseDate(b.timestamp).getTime() : 0;
       return timeB - timeA;
     });
   }, [images, searchTerm, selectedCategory]);

@@ -61,9 +61,12 @@ const formatDataForSheet = (data: any): any => {
     for (const key in data) {
       let val = data[key];
       if (typeof val === 'string') {
-        // Prevent Google Sheets from stripping leading zeroes or interpreting as formula
-        // SĐT, mã QR, ID có thể bắt đầu bằng 0, hoặc +, thì ta thêm dấu nháy đơn '
-        if ((/^0\d+$/.test(val) || val.startsWith('+')) && !val.startsWith("'")) {
+        const lowerKey = key.toLowerCase();
+        const isDateKey = lowerKey.includes('date') || lowerKey.endsWith('at') || lowerKey === 'timestamp';
+        const isDateValue = /^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}/.test(val) || /^\d{4}-\d{2}-\d{2}/.test(val) || /^\d{2}:\d{2}:\d{2}\s+\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}/.test(val);
+
+        // Ngăn Google Sheets tự ý phân tích số điện thoại, mã số hoặc ngày tháng sai lệch
+        if ((/^0\d+$/.test(val) || val.startsWith('+') || isDateKey || isDateValue) && !val.startsWith("'")) {
           val = "'" + val;
         }
       }
@@ -102,6 +105,10 @@ export const apiService = {
       });
 
       if (!response.ok) {
+        if (response.status === 404) {
+          console.warn(`[API] Optional sheet ${sheetName} not found (404). Falling back to empty array.`);
+          return [];
+        }
         throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
       }
 
@@ -133,7 +140,7 @@ export const apiService = {
           const cleaned: any = {};
           for (const key in item) {
             let val = item[key];
-            if (typeof val === 'string' && val.startsWith("'") && (val.substring(1).startsWith('0') || val.substring(1).startsWith('+'))) {
+            if (typeof val === 'string' && val.startsWith("'")) {
               val = val.substring(1);
             }
             cleaned[key] = val;
@@ -149,13 +156,17 @@ export const apiService = {
       }
       
       return [];
-    } catch (error) {
+    } catch (error: any) {
       if (retries > 0) {
         const delay = 1000 * (4 - retries);
         await new Promise(resolve => setTimeout(resolve, delay));
         return apiService.readSheet(sheetName, forceRefresh, retries - 1);
       }
-      console.error(`[API] Final error on ${sheetName}:`, error);
+      if (error && error.message && error.message.includes('404')) {
+        console.warn(`[API] Optional sheet ${sheetName} not found (404) during read operation.`);
+      } else {
+        console.error(`[API] Final error on ${sheetName}:`, error);
+      }
       return [];
     }
   },

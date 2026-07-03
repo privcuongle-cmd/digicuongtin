@@ -182,7 +182,7 @@ export const CustomerQuickAddModal: React.FC<CustomerQuickAddModalProps> = ({ ty
       dueDate: dueDate || undefined,
       assignedTo: '',
       createdBy: currentUser?.name || 'Admin',
-      createdAt: new Date().toISOString(),
+      createdAt: formatDateTime(new Date()),
       customerId: customer.id,
     });
     onClose();

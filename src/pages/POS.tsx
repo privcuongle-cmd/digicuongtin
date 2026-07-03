@@ -606,8 +606,18 @@ return (
       const invoiceId = currentTab.editingInvoiceId || currentTab.name;
       
       // Convert datetime-local value to visual format "dd/mm/yyyy HH:mm:ss"
-      const [y, m, d, hh, min] = date.split(/[-T:]/);
-      const dateStr = `${d}/${m}/${y} ${hh}:${min}:00`;
+      let dateStr = '';
+      if (date) {
+        const parts = date.split(/[-T:]/);
+        if (parts.length >= 5) {
+          const [y, m, d, hh, min] = parts;
+          dateStr = `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y} ${hh.padStart(2, '0')}:${min.padStart(2, '0')}:00`;
+        } else {
+          dateStr = formatDateTime(new Date());
+        }
+      } else {
+        dateStr = formatDateTime(new Date());
+      }
       
       const customerName = selectedCustomer ? selectedCustomer.name : 'Khách lẻ';
 

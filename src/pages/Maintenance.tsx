@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Search, Plus, Wrench, Clock, CheckCircle, ArrowLeftRight, X, User, Phone, Tag, AlertCircle, ShoppingBag, Globe, ChevronLeft, ChevronRight, FileText, Calendar, CreditCard, Package, Printer, RotateCcw, Wallet, Edit3, History } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { MaintenanceRecord, Invoice } from '../types';
-import { formatNumber, parseFormattedNumber, parseDateString } from '../lib/utils';
+import { formatNumber, parseFormattedNumber, parseDateString, smartParseDate } from '../lib/utils';
 import { NumericFormat } from 'react-number-format';
 import { generateId } from '../lib/idUtils';
 import { apiService } from '../services/api';
@@ -2373,14 +2373,14 @@ return (
         const matchingCustomer = customers.find(c => c.name === selectedInvoiceForDetail.customer || (selectedInvoiceForDetail.phone && c.phone === selectedInvoiceForDetail.phone));
         const displayPhone = selectedInvoiceForDetail.phone || matchingCustomer?.phone;
         const displayAddress = matchingCustomer?.address;
-        const dateOfThisInvoice = new Date(selectedInvoiceForDetail.date);
+        const dateOfThisInvoice = smartParseDate(selectedInvoiceForDetail.date);
         const customerInvoices = invoices.filter(i => 
           i.customer === selectedInvoiceForDetail.customer && 
-          (new Date(i.date) < dateOfThisInvoice || (i.date === selectedInvoiceForDetail.date && i.id < selectedInvoiceForDetail.id))
+          (smartParseDate(i.date) < dateOfThisInvoice || (i.date === selectedInvoiceForDetail.date && i.id < selectedInvoiceForDetail.id))
         );
         const customerReturns = (returnSalesOrders || []).filter(r => 
           r.customer === selectedInvoiceForDetail.customer && 
-          new Date(r.date) < dateOfThisInvoice
+          smartParseDate(r.date) < dateOfThisInvoice
         );
         const calculatedOldDebt = customerInvoices.reduce((sum, i) => sum + i.debt, 0) - 
                         customerReturns.reduce((sum, r) => sum + (r.total - r.paid), 0);

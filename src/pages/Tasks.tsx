@@ -134,7 +134,7 @@ export const Tasks: React.FC = () => {
   const getTimeRemaining = (dateStr?: string) => {
     if (!dateStr) return null;
     try {
-      const dueDate = new Date(dateStr);
+      const dueDate = smartParseDate(dateStr);
       const now = new Date();
       const diffInMs = dueDate.getTime() - now.getTime();
       

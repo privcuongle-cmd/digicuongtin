@@ -31,57 +31,49 @@ export const smartParseDate = (dateStr: any): Date => {
   if (!dateStr) return new Date(0);
   if (dateStr instanceof Date) return dateStr;
   
-  const str = String(dateStr);
-  let year = 0, month = 0, day = 0;
-  let hours = 0, minutes = 0, seconds = 0;
-  let isIso = false;
-
-  // Handle ISO format
+  const str = String(dateStr).trim();
+  
+  // Standard ISO format (e.g. "2026-02-06T17:00:00.000Z") is completely unambiguous. Parse directly.
   if (str.includes('T') || /^\d{4}-\d{2}-\d{2}/.test(str)) {
     const d = new Date(str);
     if (!isNaN(d.getTime())) {
-      year = d.getFullYear();
-      month = d.getMonth() + 1;
-      day = d.getDate();
-      hours = d.getHours();
-      minutes = d.getMinutes();
-      seconds = d.getSeconds();
-      isIso = true;
+      return d;
     }
   }
 
-  if (!isIso) {
-    const tokens = str.split(/[\s,T]+/);
-    // Find date part and time part
-    const datePart = tokens.find(t => t.includes('/') || t.includes('-')) || tokens[0];
-    const timePart = tokens.find(t => t.includes(':')) || (tokens.length > 1 ? tokens[1] : '00:00:00');
+  let year = 0, month = 0, day = 0;
+  let hours = 0, minutes = 0, seconds = 0;
 
-    let sep = datePart.includes('/') ? '/' : '-';
-    const parts = datePart.split(sep);
-    
-    if (parts.length === 3) {
-      if (parts[0].length === 4) { // YYYY/MM/DD
-        year = parseInt(parts[0]);
-        month = parseInt(parts[1]);
-        day = parseInt(parts[2]);
-      } else if (parts[2].length === 4) { // DD/MM/YYYY
-        year = parseInt(parts[2]);
-        month = parseInt(parts[1]);
-        day = parseInt(parts[0]);
-      } else if (parts[0].length <= 2 && parts[1].length <= 2 && parts[2].length === 2) {
-        // Handle Short year formats (not recommended but possible)
-        year = 2000 + parseInt(parts[2]);
-        month = parseInt(parts[1]);
-        day = parseInt(parts[0]);
-      }
-    }
+  const tokens = str.split(/[\s,T]+/);
+  // Find date part and time part
+  const datePart = tokens.find(t => t.includes('/') || t.includes('-')) || tokens[0];
+  const timePart = tokens.find(t => t.includes(':')) || (tokens.length > 1 ? tokens[1] : '00:00:00');
 
-    if (timePart) {
-      const tParts = timePart.split(':');
-      hours = parseInt(tParts[0] || '0');
-      minutes = parseInt(tParts[1] || '0');
-      seconds = parseInt(tParts[2] || '0');
+  let sep = datePart.includes('/') ? '/' : '-';
+  const parts = datePart.split(sep);
+  
+  if (parts.length === 3) {
+    if (parts[0].length === 4) { // YYYY/MM/DD
+      year = parseInt(parts[0]);
+      month = parseInt(parts[1]);
+      day = parseInt(parts[2]);
+    } else if (parts[2].length === 4) { // DD/MM/YYYY
+      year = parseInt(parts[2]);
+      month = parseInt(parts[1]);
+      day = parseInt(parts[0]);
+    } else if (parts[0].length <= 2 && parts[1].length <= 2 && parts[2].length === 2) {
+      // Handle Short year formats (not recommended but possible)
+      year = 2000 + parseInt(parts[2]);
+      month = parseInt(parts[1]);
+      day = parseInt(parts[0]);
     }
+  }
+
+  if (timePart) {
+    const tParts = timePart.split(':');
+    hours = parseInt(tParts[0] || '0');
+    minutes = parseInt(tParts[1] || '0');
+    seconds = parseInt(tParts[2] || '0');
   }
 
   if (year === 0) {
@@ -89,29 +81,14 @@ export const smartParseDate = (dateStr: any): Date => {
     return isNaN(d.getTime()) ? new Date(0) : d;
   }
 
-  // Logic hoán đổi thông minh
-  // Nếu tháng > 12, chắc chắn định dạng là MM/DD/YYYY
+  // Safe static fallback for US format inputs where day is > 12 (e.g. "06/13/2026")
   if (month > 12) {
     const temp = month;
     month = day;
     day = temp;
   } 
   
-  let d = new Date(year, month - 1, day, hours, minutes, seconds);
-  
-  // Kiểm tra hoán đổi tương lai
-  const now = new Date();
-  const buffer = new Date(now);
-  buffer.setDate(buffer.getDate() + 1);
-  
-  if (d.getTime() > buffer.getTime() && day <= 12 && month <= 12) {
-    const swapped = new Date(year, day - 1, month, hours, minutes, seconds);
-    if (swapped.getTime() <= buffer.getTime()) {
-      d = swapped;
-    }
-  }
-
-  return d;
+  return new Date(year, month - 1, day, hours, minutes, seconds);
 };
 
 export const formatDateTime = (dateStr?: string | number | Date) => {

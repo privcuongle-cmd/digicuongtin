@@ -3,7 +3,7 @@ import { Search, UserPlus, User, X, FileText, Calendar, Wallet, ChevronRight, Cr
 import { useAppContext } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import { Customer, Invoice, CashTransaction, MaintenanceRecord, Task, WifiRecord, CameraAccountRecord, CameraInstallation } from '../types';
-import { formatNumber, parseFormattedNumber, formatDateTime, parseDateString, handlePhoneCall, formatDate } from '../lib/utils';
+import { formatNumber, parseFormattedNumber, formatDateTime, parseDateString, handlePhoneCall, formatDate, smartParseDate } from '../lib/utils';
 import { generateId } from '../lib/idUtils';
 import { PrintTemplate } from '../components/PrintTemplate';
 import { ImageLibraryModal } from '../components/ImageLibraryModal';
@@ -1359,7 +1359,7 @@ return (
                                    {task.dueDate && (
                                      <div>
                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1 italic">Hạn chót</p>
-                                       <p className={`text-xs font-normal ${new Date(task.dueDate) < new Date() && task.status !== 'COMPLETED' ? 'text-rose-600' : 'text-slate-600'}`}>
+                                       <p className={`text-xs font-normal ${smartParseDate(task.dueDate) < new Date() && task.status !== 'COMPLETED' ? 'text-rose-600' : 'text-slate-600'}`}>
                                           {formatDateTime(task.dueDate)}
                                        </p>
                                      </div>

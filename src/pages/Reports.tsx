@@ -42,6 +42,15 @@ export const Reports: React.FC = () => {
   ];
 
   const formattedDate = useMemo(() => {
+    if (!reportDate) return '';
+    const parts = reportDate.split(/[-/]/);
+    if (parts.length === 3) {
+      if (parts[0].length === 4) { // YYYY-MM-DD
+        return `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
+      } else if (parts[2].length === 4) { // DD-MM-YYYY or DD/MM/YYYY
+        return `${parts[0].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[2]}`;
+      }
+    }
     const d = new Date(reportDate);
     return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
   }, [reportDate]);
