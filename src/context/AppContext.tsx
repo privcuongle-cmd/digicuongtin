@@ -1019,79 +1019,79 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       totalDebt: isUpdate && existingInvoice ? (existingInvoice.oldDebt || 0) + invoice.debt : totalDebt
     };
 
-    // Optimistic update
-    setState(prev => {
-      const soldSns = new Set<string>();
-      newInvoice.items.forEach(item => {
+    const soldSns = new Set<string>();
+    newInvoice.items.forEach(item => {
+      if (item.sn && typeof item.sn === 'string') {
+        item.sn.split(',').forEach(s => soldSns.add(s.trim()));
+      }
+    });
+    
+    const oldSns = new Set<string>();
+    if (isUpdate && existingInvoice) {
+      existingInvoice.items.forEach(item => {
         if (item.sn && typeof item.sn === 'string') {
-          item.sn.split(',').forEach(s => soldSns.add(s.trim()));
+          item.sn.split(',').forEach(s => oldSns.add(s.trim()));
         }
       });
-      
-      const oldSns = new Set<string>();
-      if (isUpdate && existingInvoice) {
-        existingInvoice.items.forEach(item => {
-          if (item.sn && typeof item.sn === 'string') {
-            item.sn.split(',').forEach(s => oldSns.add(s.trim()));
-          }
-        });
-      }
-      
-      const newStockCards: StockCard[] = newInvoice.items.map((item, i) => ({
-        id: `SC_${newInvoice.id}_${i}`,
-        prodId: item.id,
-        type: 'XUAT',
-        qty: item.qty,
-        partner: newInvoice.customer,
-        date: newInvoice.date,
-        price: item.price,
-        refId: newInvoice.id,
-        sn: item.sn ? item.sn.split(',').map(s => s.trim()) : []
-      }));
+    }
+    
+    const newStockCards: StockCard[] = newInvoice.items.map((item, i) => ({
+      id: `SC_${newInvoice.id}_${i}`,
+      prodId: item.id,
+      type: 'XUAT',
+      qty: item.qty,
+      partner: newInvoice.customer,
+      date: newInvoice.date,
+      price: item.price,
+      refId: newInvoice.id,
+      sn: item.sn ? item.sn.split(',').map(s => s.trim()) : []
+    }));
 
-      // Find original cash/wallet transaction to modify if needed
-      let updatedCashTransactions = prev.cashTransactions || [];
-      
-      // If we resolved the ID conflict from old ID to new ID, fix up pre-added transaction in local state
-      if (!isUpdate && invoice.id && invoice.id !== finalId) {
-        updatedCashTransactions = updatedCashTransactions.map(t => {
-          if (t.refId === invoice.id && t.category === 'SALES_REVENUE') {
-            return {
-              ...t,
-              refId: finalId,
-              note: t.note.replaceAll(invoice.id, finalId)
-            };
-          }
-          return t;
-        });
-      }
-      
-      const txToUpdate = isUpdate ? updatedCashTransactions.find(t => t.refId === newInvoice.id && t.category === 'SALES_REVENUE') : null;
-      if (txToUpdate) {
-        updatedCashTransactions = updatedCashTransactions.map(t => 
-          t.id === txToUpdate.id ? { ...t, amount: newInvoice.paid } : t
-        );
-      }
-
-      // Update products stock in state
-      const updatedProducts = (prev.products || []).map(p => {
-        let newStock = p.stock || 0;
-        
-        // 1. Revert old stock if update
-        if (isUpdate && !p.isService && existingInvoice) {
-          const oldItem = existingInvoice.items.find(i => i.id === p.id);
-          if (oldItem) newStock += oldItem.qty;
+    // Find original cash/wallet transaction to modify if needed
+    let updatedCashTransactions = stateRef.current.cashTransactions || [];
+    
+    // If we resolved the ID conflict from old ID to new ID, fix up pre-added transaction in local state
+    if (!isUpdate && invoice.id && invoice.id !== finalId) {
+      updatedCashTransactions = updatedCashTransactions.map(t => {
+        if (t.refId === invoice.id && t.category === 'SALES_REVENUE') {
+          return {
+            ...t,
+            refId: finalId,
+            note: t.note.replaceAll(invoice.id, finalId)
+          };
         }
-        
-        // 2. Subtract new stock
-        const newItem = newInvoice.items.find(i => i.id === p.id);
-        if (newItem && !p.isService) {
-          newStock -= newItem.qty;
-        }
-        
-        return { ...p, stock: newStock };
+        return t;
       });
+    }
+    
+    const txToUpdate = isUpdate ? updatedCashTransactions.find(t => t.refId === newInvoice.id && t.category === 'SALES_REVENUE') : null;
+    if (txToUpdate) {
+      updatedCashTransactions = updatedCashTransactions.map(t => 
+        t.id === txToUpdate.id ? { ...t, amount: newInvoice.paid } : t
+      );
+    }
 
+    // Synchronously compute the correct updated products list to prevent any state-update race conditions
+    const updatedProducts = (stateRef.current.products || []).map(p => {
+      let newStock = p.stock || 0;
+      
+      // 1. Revert old stock if update
+      if (isUpdate && !p.isService && existingInvoice) {
+        const oldItem = existingInvoice.items.find(i => i.id === p.id);
+        if (oldItem) newStock += oldItem.qty;
+      }
+      
+      // 2. Subtract new stock
+      const newItem = newInvoice.items.find(i => i.id === p.id);
+      if (newItem && !p.isService) {
+        newStock -= newItem.qty;
+      }
+      
+      return { ...p, stock: newStock };
+    });
+
+    // Optimistic update local React state
+    setState(prev => {
       // Filter out old invoice from the parsed list
       const otherInvoices = (prev.invoices || []).filter(inv => inv.id !== newInvoice.id);
 
@@ -1207,22 +1207,44 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               detailPromises.push(apiService.createRecord('StockCards', stockCardData));
             }
 
-            // Sync product stock to DB
-            const p = stateRef.current.products.find(prod => prod.id === newItem.id);
+            // Sync product stock to DB using the synchronously-computed non-racey stock value
+            const p = updatedProducts.find(prod => prod.id === newItem.id);
             if (p && !p.isService) {
-              const adjustedStock = p.stock + (isUpdate && existingInvoice ? (existingInvoice.items.find(old => old.id === p.id)?.qty || 0) : 0) - newItem.qty;
-              detailPromises.push(apiService.updateRecord('Products', newItem.id, { stock: adjustedStock }));
+              detailPromises.push(apiService.updateRecord('Products', newItem.id, { stock: p.stock }));
             }
           } else if (isUpdate && oldItem) {
             // Item removed in edit: Delete detail row
             detailPromises.push(apiService.deleteRecord('InvoiceDetails', detailId));
             detailPromises.push(apiService.deleteRecord('StockCards', scId));
             
-            // Revert stock in DB for removed item
-            const p = stateRef.current.products.find(prod => prod.id === oldItem.id);
+            // Revert stock in DB for removed item using the synchronously-computed stock value
+            const p = updatedProducts.find(prod => prod.id === oldItem.id);
             if (p && !p.isService) {
-              detailPromises.push(apiService.updateRecord('Products', p.id, { stock: p.stock + oldItem.qty }));
+              detailPromises.push(apiService.updateRecord('Products', p.id, { stock: p.stock }));
             }
+          }
+        }
+
+        // Update serial status in Google Sheets database so they are correctly stored as SOLD
+        for (const sn of soldSns) {
+          const formattedSn = formatSnForDb(sn);
+          detailPromises.push(apiService.updateRecord('Serials', formattedSn, { 
+            status: 'SOLD',
+            saleDate: newInvoice.date,
+            saleRef: newInvoice.id
+          }));
+        }
+
+        // Revert serial status in Google Sheets database for removed serials if it is an update
+        if (isUpdate) {
+          const removedSns = [...oldSns].filter(s => !soldSns.has(s));
+          for (const sn of removedSns) {
+            const formattedSn = formatSnForDb(sn);
+            detailPromises.push(apiService.updateRecord('Serials', formattedSn, { 
+              status: 'AVAILABLE',
+              saleDate: '',
+              saleRef: ''
+            }));
           }
         }
         
@@ -1365,37 +1387,38 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       sn: item.sn || []
     }));
 
+    let updatedCashTransactions = stateRef.current.cashTransactions || [];
+    const txToUpdate = isUpdate ? updatedCashTransactions.find(t => t.refId === newOrder.id && t.category === 'IMPORT_PAYMENT') : null;
+    if (txToUpdate) {
+      updatedCashTransactions = updatedCashTransactions.map(t => 
+        t.id === txToUpdate.id ? { ...t, amount: newOrder.paid, walletId: newOrder.walletId } : t
+      );
+    }
+      
+    // Synchronously compute the correct updated products list to prevent any state-update race conditions
+    const updatedProducts = (stateRef.current.products || []).map(p => {
+      let newStock = p.stock || 0;
+      
+      // Reverse old stock if update
+      if (isUpdate && existingOrder && !p.isService) {
+        const oldItem = existingOrder.items.find(i => i.id === p.id);
+        if (oldItem) newStock -= oldItem.qty; // Reverse the previous import meaning we subtract the previously added amount
+      }
+      
+      // Apply new stock
+      const newItem = newOrder.items.find(i => i.id === p.id);
+      if (newItem && !p.isService) {
+        newStock += newItem.qty;
+      }
+      
+      return { ...p, stock: newStock, importPrice: newItem ? newItem.price : p.importPrice };
+    });
+
     setState(prev => {
       const otherOrders = isUpdate 
         ? (prev.importOrders || []).filter(o => o.id !== newOrder.id)
         : (prev.importOrders || []);
 
-      let updatedCashTransactions = prev.cashTransactions || [];
-      const txToUpdate = isUpdate ? updatedCashTransactions.find(t => t.refId === newOrder.id && t.category === 'IMPORT_PAYMENT') : null;
-      if (txToUpdate) {
-        updatedCashTransactions = updatedCashTransactions.map(t => 
-          t.id === txToUpdate.id ? { ...t, amount: newOrder.paid, walletId: newOrder.walletId } : t
-        );
-      }
-        
-      const updatedProducts = (prev.products || []).map(p => {
-        let newStock = p.stock || 0;
-        
-        // Reverse old stock if update
-        if (isUpdate && existingOrder && !p.isService) {
-          const oldItem = existingOrder.items.find(i => i.id === p.id);
-          if (oldItem) newStock -= oldItem.qty; // Reverse the previous import meaning we subtract the previously added amount
-        }
-        
-        // Apply new stock
-        const newItem = newOrder.items.find(i => i.id === p.id);
-        if (newItem && !p.isService) {
-          newStock += newItem.qty;
-        }
-        
-        return { ...p, stock: newStock, importPrice: newItem ? newItem.price : p.importPrice };
-      });
-        
       return { 
         ...prev, 
         importOrders: [...otherOrders, newOrder],
@@ -1618,10 +1641,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               detailPromises.push(apiService.createRecord('StockCards', stockCardData));
             }
 
-            const p = stateRef.current.products.find(prod => prod.id === newItem.id);
+            // Sync product stock to DB using the synchronously-computed non-racey stock value
+            const p = updatedProducts.find(prod => prod.id === newItem.id);
             if (p && !p.isService) {
               detailPromises.push(apiService.updateRecord('Products', newItem.id, { 
-                stock: p.stock - (existingOrder?.items.find(old => old.id === p.id)?.qty || 0) + newItem.qty,
+                stock: p.stock,
                 costPrice: newItem.price
               }));
             }
@@ -1629,19 +1653,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             detailPromises.push(apiService.deleteRecord('ImportDetails', detailId));
             detailPromises.push(apiService.deleteRecord('StockCards', scId));
             
-            const p = stateRef.current.products.find(prod => prod.id === oldItem.id);
+            // Sync product stock to DB using the synchronously-computed non-racey stock value
+            const p = updatedProducts.find(prod => prod.id === oldItem.id);
             if (p && !p.isService) {
               detailPromises.push(apiService.updateRecord('Products', p.id, { 
-                stock: p.stock - oldItem.qty 
+                stock: p.stock 
               }));
             }
           }
         }
         await Promise.all(detailPromises);
       } catch (error) {
-        console.error("Failed to sync import to cloud:", error);
+        console.error("Failed to sync import order to cloud:", error);
       }
     })();
+
     updateSupplierStats(newOrder.supplier);
   };
 

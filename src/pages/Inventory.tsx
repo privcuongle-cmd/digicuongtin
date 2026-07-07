@@ -195,6 +195,53 @@ return (
     setDescription('');
   };
 
+  const [isReconciling, setIsReconciling] = useState(false);
+
+  const handleReconcileStock = async () => {
+    if (!window.confirm('Hệ thống sẽ tự động tính toán lại số lượng tồn kho của toàn bộ sản phẩm dựa trên lịch sử Thẻ kho (Nhập/Xuất/Trả hàng) và đồng bộ chính xác lại với Google Sheets. Bạn có chắc chắn muốn thực hiện cân bằng kho không?')) {
+      return;
+    }
+
+    setIsReconciling(true);
+    let updatedCount = 0;
+
+    try {
+      // Loop through all products that are NOT services
+      for (const p of products) {
+        if (p.isService) continue;
+
+        // Calculate expected stock from stock cards
+        const cards = stockCards.filter(sc => sc.prodId === p.id);
+        let calculatedStock = 0;
+
+        cards.forEach(sc => {
+          const qty = Number(sc.qty) || 0;
+          if (sc.type === 'NHAP' || sc.type === 'TRA_BAN') {
+            calculatedStock += qty;
+          } else if (sc.type === 'XUAT' || sc.type === 'TRA_NHAP') {
+            calculatedStock -= qty;
+          }
+        });
+
+        // Ensure stock is not negative
+        calculatedStock = Math.max(0, calculatedStock);
+
+        if (p.stock !== calculatedStock) {
+          console.log(`Reconciling product ${p.id} (${p.name}): current stock ${p.stock} -> calculated stock ${calculatedStock}`);
+          await updateProduct(p.id, { stock: calculatedStock }, true);
+          updatedCount++;
+        }
+      }
+
+      alert(`Đã hoàn thành cân bằng tồn kho! Cập nhật thành công ${updatedCount} sản phẩm.`);
+    } catch (e) {
+      console.error("Error during stock reconciliation:", e);
+      alert('Có lỗi xảy ra trong quá trình cân bằng tồn kho.');
+    } finally {
+      setIsReconciling(false);
+    }
+  };
+
   const filteredCategories = useMemo(() => {
     const search = categorySearch.toLowerCase().trim();
     if (!search && !isCategoryDropdownOpen) return categories;
@@ -474,10 +521,28 @@ return (
             <AlertTriangle size={16} />
             Sắp hết hàng
           </button>
+
+          <button 
+            onClick={handleReconcileStock}
+            disabled={isReconciling}
+            className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-lg text-sm font-bold transition-all shrink-0 shadow-sm"
+          >
+            <RotateCcw size={16} className={isReconciling ? "animate-spin" : ""} />
+            {isReconciling ? "Cân bằng..." : "Cân bằng kho"}
+          </button>
         </div>
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2 hidden md:flex">
+          <button 
+            onClick={handleReconcileStock}
+            disabled={isReconciling}
+            className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-lg shadow-sm flex items-center gap-2 font-bold text-sm transition-all"
+            title="Tính toán và đồng bộ lại tồn kho thực tế từ thẻ kho"
+          >
+            <RotateCcw size={16} className={isReconciling ? "animate-spin" : ""} />
+            {isReconciling ? "Cân bằng..." : "Cân bằng kho"}
+          </button>
           <div className="flex items-center gap-2 mr-2">
             <button 
               onClick={() => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, Plus, Truck, CheckCircle, X, Trash2, Barcode, Printer, ArrowLeft, LayoutGrid, Eye, Info, ChevronDown, Edit2, ArrowRight, UserCircle, RotateCcw } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Product, ImportItem, Supplier, CashTransaction, ReturnImportOrder, ImportOrder } from '../types';
@@ -22,6 +22,7 @@ export const CreateReturnImport: React.FC = () => {
   const [note, setNote] = useState('');
   const [walletId, setWalletId] = useState<string>('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const submittingRef = useRef(false);
 
   // Handle pre-fill from location state
   useEffect(() => {
@@ -174,6 +175,9 @@ return () => clearTimeout(handler);
   };
 
   const executeReturn = async () => {
+    if (submittingRef.current) return;
+    try {
+      submittingRef.current = true;
     const now = new Date();
     const returnId = returnCode === 'Mã phiếu tự động' ? generateId('THN', returnImportOrders) : returnCode;
     const dateStr = formatDateTime(now);
@@ -233,6 +237,11 @@ return () => clearTimeout(handler);
     addReturnImportOrder(order);
     setShowConfirmModal(false);
     navigate('/return-import');
+    } catch (error) {
+      console.error("Error creating return import order:", error);
+      alert("Có lỗi xảy ra khi hoàn hàng!");
+      submittingRef.current = false;
+    }
   };
 
   useMobileBackModal(orderSuggestions.length > 0, () => setOrderSuggestions([]));

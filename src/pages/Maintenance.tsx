@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Search, Plus, Wrench, Clock, CheckCircle, ArrowLeftRight, X, User, Phone, Tag, AlertCircle, ShoppingBag, Globe, ChevronLeft, ChevronRight, FileText, Calendar, CreditCard, Package, Printer, RotateCcw, Wallet, Edit3, History } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
@@ -46,6 +46,7 @@ export const Maintenance: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
+  const submittingRef = useRef(false);
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<MaintenanceRecord | null>(null);
@@ -267,53 +268,62 @@ export const Maintenance: React.FC = () => {
   const paginatedRecords = filteredRecords.slice(startIndex, endIndex);
 
   const handleSave = async () => {
+    if (submittingRef.current) return;
     if (!customerName || !customerPhone || !productName || !issue) {
       alert('Vui lòng nhập đủ thông tin bắt buộc');
       return;
     }
 
-    const now = new Date();
-    const id = generateId('BH', maintenanceRecords);
-    const finalTaskId = taskIdFromUrlState || (note.startsWith('Thực hiện cho CV #') ? note.replace('Thực hiện cho CV #', '').split(' ')[0] : null);
-    
-    let warrantyInfo = 'Ngoài bảo hành';
-    if (deviceWarrantyStatus && !deviceWarrantyStatus.isExpired && deviceWarrantyStatus.days > 0) {
-      warrantyInfo = `Còn ${deviceWarrantyStatus.days} ngày`;
-    }
-
-    await addMaintenanceRecord({
-      id,
-      date: formatDateTime(now),
-      customerId: selectedCustomerObj?.id,
-      customerName,
-      customerPhone,
-      productName,
-      serialNumber,
-      issue,
-      status: 'RECEIVING',
-      cost: parseFormattedNumber(cost) || 0,
-      paidAmount: parseFormattedNumber(paidAmount) || 0,
-      oldDebt: parseFormattedNumber(oldDebt) || 0,
-      newDebt: (parseFormattedNumber(oldDebt) || 0) + (parseFormattedNumber(cost) || 0) - (parseFormattedNumber(paidAmount) || 0),
-      note,
-      warrantyRemainingInfo: warrantyInfo,
-      taskId: finalTaskId || undefined
-    });
-
-    if (finalTaskId) {
-      const task = tasks.find(t => t.id === finalTaskId);
-      if (task) {
-        updateTask(finalTaskId, { 
-          ...task, 
-          status: 'COMPLETED',
-          completedAt: formatDateTime(now),
-          repairId: id
-        });
+    try {
+      submittingRef.current = true;
+      const now = new Date();
+      const id = generateId('BH', maintenanceRecords);
+      const finalTaskId = taskIdFromUrlState || (note.startsWith('Thực hiện cho CV #') ? note.replace('Thực hiện cho CV #', '').split(' ')[0] : null);
+      
+      let warrantyInfo = 'Ngoài bảo hành';
+      if (deviceWarrantyStatus && !deviceWarrantyStatus.isExpired && deviceWarrantyStatus.days > 0) {
+        warrantyInfo = `Còn ${deviceWarrantyStatus.days} ngày`;
       }
-    }
 
-    setIsModalOpen(false);
-    resetForm();
+      await addMaintenanceRecord({
+        id,
+        date: formatDateTime(now),
+        customerId: selectedCustomerObj?.id,
+        customerName,
+        customerPhone,
+        productName,
+        serialNumber,
+        issue,
+        status: 'RECEIVING',
+        cost: parseFormattedNumber(cost) || 0,
+        paidAmount: parseFormattedNumber(paidAmount) || 0,
+        oldDebt: parseFormattedNumber(oldDebt) || 0,
+        newDebt: (parseFormattedNumber(oldDebt) || 0) + (parseFormattedNumber(cost) || 0) - (parseFormattedNumber(paidAmount) || 0),
+        note,
+        warrantyRemainingInfo: warrantyInfo,
+        taskId: finalTaskId || undefined
+      });
+
+      if (finalTaskId) {
+        const task = tasks.find(t => t.id === finalTaskId);
+        if (task) {
+          updateTask(finalTaskId, { 
+            ...task, 
+            status: 'COMPLETED',
+            completedAt: formatDateTime(now),
+            repairId: id
+          });
+        }
+      }
+
+      setIsModalOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error("Error saving maintenance record:", error);
+      alert("Có lỗi xảy ra khi lưu phiếu bảo hành!");
+    } finally {
+      submittingRef.current = false;
+    }
   };
 
   const handleAddExternalSerial = async () => {

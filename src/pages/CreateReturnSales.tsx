@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, Plus, ArrowLeft, X, Barcode, UserCircle, RotateCcw, Info } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Product, InvoiceItem, Customer, CashTransaction, ReturnSalesOrder, Invoice } from '../types';
@@ -21,6 +21,7 @@ export const CreateReturnSales: React.FC = () => {
   const [paidAmount, setPaidAmount] = useState<number>(0);
   const [note, setNote] = useState('');
   const [walletId, setWalletId] = useState<string>('');
+  const submittingRef = useRef(false);
 
   // Handle pre-fill from location state
   useEffect(() => {
@@ -95,11 +96,14 @@ export const CreateReturnSales: React.FC = () => {
   };
 
   const handleCreateReturn = async () => {
+    if (submittingRef.current) return;
     if (selectedItems.length === 0) return alert('Vui lòng chọn ít nhất một sản phẩm để trả!');
     if (!selectedCustomer) return alert('Vui lòng chọn khách hàng!');
     if (paidAmount > 0 && !walletId) return alert('Vui lòng chọn nguồn tiền chi trả!');
     
-    const now = new Date();
+    try {
+      submittingRef.current = true;
+      const now = new Date();
     const returnId = returnCode === 'Mã phiếu tự động' ? generateId('THB', returnSalesOrders) : returnCode;
     const dateStr = formatDateTime(now);
 
@@ -151,6 +155,11 @@ export const CreateReturnSales: React.FC = () => {
 
     addReturnSalesOrder(order);
     navigate('/return-sales');
+    } catch (error) {
+      console.error("Error creating return sales order:", error);
+      alert("Có lỗi xảy ra khi tạo phiếu trả hàng!");
+      submittingRef.current = false;
+    }
   };
 
   return (

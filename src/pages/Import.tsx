@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, Plus, Truck, CheckCircle, X, Trash2, Barcode, Printer, ArrowLeft, LayoutGrid, Eye, Info, ChevronDown, Edit2, ArrowRight, UserCircle, PieChart, FileText, Package, Image as ImageIcon } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
@@ -56,6 +56,7 @@ export const Import: React.FC = () => {
   const [printData, setPrintData] = useState<any>(null);
   const [showSuccessModal, setShowSuccessModal] = useState<{id: string, total: number} | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const location = useLocation();
   const [showDraftPrompt, setShowDraftPrompt] = useState(() => {
@@ -296,7 +297,8 @@ export const Import: React.FC = () => {
   };
 
   const handleImport = async () => {
-    if (isSubmitting) return;
+    if (isSubmitting || submittingRef.current) return;
+    submittingRef.current = true;
     setIsSubmitting(true);
     setShowConfirmModal(false);
 
@@ -444,6 +446,7 @@ export const Import: React.FC = () => {
       alert("Có lỗi xảy ra khi tạo phiếu nhập!");
     } finally {
       setIsSubmitting(false);
+      submittingRef.current = false;
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, Plus, UserPlus, UserCircle, CheckCircle, Check, X, Trash2, Printer, Barcode, ChevronDown, Edit3, PieChart, ShoppingCart, Tag, Image as ImageIcon, ArrowLeft, Info, FileText, Wallet, RefreshCw } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
@@ -356,6 +356,7 @@ return (
   const [showSuccessModal, setShowSuccessModal] = useState<{id: string, total: number} | null>(null);
   const [showDraftPrompt, setShowDraftPrompt] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const checkoutRef = useRef(false);
   const [checkoutConfirmModal, setCheckoutConfirmModal] = useState<{isOpen: boolean, type: 'EDIT' | 'NORMAL'} | null>(null);
 
   // Lock scroll for modals
@@ -582,7 +583,7 @@ return (
 
   const handleCheckout = async (autoPrint: boolean = false) => {
     if (cart.length === 0) return alert('Giỏ hàng trống!');
-    if (isCheckingOut) return;
+    if (isCheckingOut || checkoutRef.current) return;
 
     const finalWalletId = currentTab.walletId;
     
@@ -598,6 +599,7 @@ return (
     }
 
     try {
+      checkoutRef.current = true;
       setIsCheckingOut(true);
       // Handle Edit Mode: We no longer need to delete the invoice first.
       // addInvoice now handles Upsert logic internally.
@@ -732,6 +734,7 @@ return (
       alert("Thanh toán thất bại. Vui lòng thử lại.");
     } finally {
       setIsCheckingOut(false);
+      checkoutRef.current = false;
     }
   };
 
