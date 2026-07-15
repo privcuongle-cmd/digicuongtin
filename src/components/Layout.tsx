@@ -389,7 +389,7 @@ export const Layout: React.FC = () => {
 
       {/* Offline & Pending Sync Banner */}
       {offlineState && (offlineState.offline || offlineState.pendingCount > 0) && (
-        <div className={`w-full max-w-[1600px] mx-auto px-4 md:px-6 mt-[72px] md:mt-2 print:hidden`}>
+        <div className={`w-full max-w-[1600px] mx-auto px-4 md:px-6 mt-2 md:mt-2 print:hidden`}>
           <div className="flex flex-col gap-2">
             {/* 1. Offline Banner */}
             {offlineState.offline && (
