@@ -7,7 +7,7 @@ import { useMobileBackModal } from '../hooks/useMobileBackModal';
 export const Layout: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { currentUser, logout, syncData, products, isSyncing, lastSync } = useAppContext();
+  const { currentUser, logout, syncData, products, isSyncing, lastSync, offlineState, replayPendingQueue } = useAppContext();
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -386,6 +386,70 @@ export const Layout: React.FC = () => {
           </div>
         </div>
       </header>
+
+      {/* Offline & Pending Sync Banner */}
+      {offlineState && (offlineState.offline || offlineState.pendingCount > 0) && (
+        <div className={`w-full max-w-[1600px] mx-auto px-4 md:px-6 mt-[72px] md:mt-2 print:hidden`}>
+          <div className="flex flex-col gap-2">
+            {/* 1. Offline Banner */}
+            {offlineState.offline && (
+              <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl flex items-center justify-between shadow-xs animate-in slide-in-from-top duration-300">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-amber-100 text-amber-600 rounded-lg shrink-0">
+                    <Wifi size={18} className="animate-pulse" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold">Mất kết nối mạng (Ngoại tuyến)</p>
+                    <p className="text-xs text-amber-700 font-medium">Bạn có thể tiếp tục xem dữ liệu, thêm, sửa, xóa bình thường. Hệ thống sẽ tự động đồng bộ khi có sóng trở lại.</p>
+                  </div>
+                </div>
+                <span className="text-[10px] bg-amber-200/60 text-amber-900 font-black px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0 hidden sm:inline-block">
+                  Đang dùng Cache
+                </span>
+              </div>
+            )}
+
+            {/* 2. Pending Write Sync Queue Banner */}
+            {offlineState.pendingCount > 0 && (
+              <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-xl flex items-center justify-between shadow-xs animate-in slide-in-from-top duration-300">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-100 text-blue-600 rounded-lg shrink-0">
+                    <RefreshCw size={18} className={offlineState.isSyncing ? 'animate-spin' : ''} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold">Hàng đợi đồng bộ ({offlineState.pendingCount} thao tác)</p>
+                    <p className="text-xs text-blue-700 font-medium">
+                      {offlineState.offline 
+                        ? 'Các thao tác thêm/sửa/xóa đã được lưu tạm trên máy của bạn và sẽ gửi lên Google Sheets khi có kết nối Internet.' 
+                        : 'Có dữ liệu lưu tạm chưa đồng bộ. Hãy nhấn nút bên cạnh để cập nhật ngay.'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (offlineState.offline) {
+                      alert('Không thể đồng bộ khi thiết bị của bạn đang mất kết nối Internet. Vui lòng kiểm tra lại sóng/wifi.');
+                      return;
+                    }
+                    await replayPendingQueue();
+                  }}
+                  disabled={offlineState.isSyncing}
+                  className={`text-xs font-bold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white px-3 py-1.5 rounded-lg shadow-sm transition-all flex items-center gap-1.5 shrink-0`}
+                >
+                  {offlineState.isSyncing ? (
+                    <>
+                      <RefreshCw size={12} className="animate-spin" />
+                      Đang đồng bộ...
+                    </>
+                  ) : (
+                    'Đồng bộ ngay'
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <main className="flex-1 w-full max-w-[1600px] mx-auto md:p-6">

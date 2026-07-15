@@ -6,14 +6,14 @@ const IMAGE_SHEET_ID = '1BvCMwAq5zItV3fEqAy1saP7eTMQ66orrZ4CG6H_ecgM';
 const CACHE_TTL = 5 * 60 * 1000; // 5 phút
 const CACHE_PREFIX = 'DIGIKIOT_CACHE_';
 
-const getCache = (key: string) => {
+const getCache = (key: string, ignoreExpiry = false) => {
   try {
     const cached = localStorage.getItem(CACHE_PREFIX + key);
     if (!cached) return null;
     
     const { data, timestamp } = JSON.parse(cached);
-    if (Date.now() - timestamp > CACHE_TTL) {
-      localStorage.removeItem(CACHE_PREFIX + key);
+    if (!ignoreExpiry && (Date.now() - timestamp > CACHE_TTL)) {
+      // Don't delete it automatically, so we can fall back to it if network fails!
       return null;
     }
     return data;
@@ -32,6 +32,147 @@ const setCache = (key: string, data: any) => {
     console.warn('[CACHE] Out of storage space');
   }
 };
+
+// ==========================================
+// CẤU HÌNH OFFLINE SYNCHRONIZATION QUEUE
+// ==========================================
+export interface PendingSyncOp {
+  id: string;
+  action: 'create' | 'update' | 'delete';
+  sheetName: string;
+  recordId?: string;
+  data?: any;
+  timestamp: number;
+}
+
+export const getPendingQueue = (): PendingSyncOp[] => {
+  try {
+    const queue = localStorage.getItem('DIGIKIOT_PENDING_SYNC');
+    return queue ? JSON.parse(queue) : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+export const savePendingQueue = (queue: PendingSyncOp[]) => {
+  try {
+    localStorage.setItem('DIGIKIOT_PENDING_SYNC', JSON.stringify(queue));
+    triggerOfflineStatus(null);
+  } catch (e) {
+    console.warn('[OFFLINE] Failed to save pending queue to localStorage');
+  }
+};
+
+export const triggerOfflineStatus = (isOffline: boolean | null, isSyncing = false) => {
+  if (typeof window === 'undefined') return;
+  
+  let offline = isOffline;
+  if (offline === null) {
+    offline = !navigator.onLine;
+  }
+  
+  const pendingCount = getPendingQueue().length;
+  
+  window.dispatchEvent(new CustomEvent('offline-status-change', {
+    detail: {
+      offline,
+      pendingCount,
+      isSyncing
+    }
+  }));
+};
+
+export const addToQueue = (action: 'create' | 'update' | 'delete', sheetName: string, recordId?: string, data?: any) => {
+  const queue = getPendingQueue();
+  const newOp: PendingSyncOp = {
+    id: `OP_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+    action,
+    sheetName,
+    recordId,
+    data,
+    timestamp: Date.now()
+  };
+  queue.push(newOp);
+  savePendingQueue(queue);
+  console.log(`[OFFLINE] Queued write operation: ${action} on ${sheetName}`, newOp);
+};
+
+let isReplayingQueue = false;
+
+export const replayPendingQueue = async () => {
+  if (isReplayingQueue) return;
+  const queue = getPendingQueue();
+  if (queue.length === 0) return;
+
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    console.log('[OFFLINE SYNC] Cannot replay queue while offline.');
+    return;
+  }
+
+  console.log(`[OFFLINE SYNC] Starting replay of ${queue.length} pending operations...`);
+  isReplayingQueue = true;
+  triggerOfflineStatus(null, true);
+
+  let successCount = 0;
+  try {
+    while (queue.length > 0) {
+      const op = queue[0];
+      console.log(`[OFFLINE SYNC] Replaying [${op.action}] on [${op.sheetName}]...`);
+      
+      let res;
+      if (op.action === 'create') {
+        res = await apiService.createRecordRaw(op.sheetName, op.data);
+      } else if (op.action === 'update') {
+        res = await apiService.updateRecordRaw(op.sheetName, op.recordId!, op.data);
+      } else if (op.action === 'delete') {
+        res = await apiService.deleteRecordRaw(op.sheetName, op.recordId!);
+      }
+
+      if (res && res.success) {
+        console.log(`[OFFLINE SYNC] Replayed successfully [${op.action}] on [${op.sheetName}].`);
+        queue.shift(); // Remove completed operation
+        savePendingQueue(queue);
+        successCount++;
+      } else {
+        console.warn(`[OFFLINE SYNC] Failed to replay operation. Pausing queue replay. Error:`, res);
+        break;
+      }
+    }
+  } catch (error) {
+    console.error(`[OFFLINE SYNC] Error replaying queue:`, error);
+  } finally {
+    isReplayingQueue = false;
+    const currentQueue = getPendingQueue();
+    triggerOfflineStatus(null, false);
+
+    if (successCount > 0 && currentQueue.length === 0) {
+      console.log(`[OFFLINE SYNC] All operations synced successfully! Dispatching event...`);
+      window.dispatchEvent(new CustomEvent('offline-sync-completed'));
+    }
+  }
+};
+
+// Setup global network event listeners
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    console.log('[NETWORK] Browser went online.');
+    triggerOfflineStatus(false);
+    replayPendingQueue();
+  });
+
+  window.addEventListener('offline', () => {
+    console.log('[NETWORK] Browser went offline.');
+    triggerOfflineStatus(true);
+  });
+
+  // Schedule auto sync replay check on load
+  setTimeout(() => {
+    triggerOfflineStatus(null);
+    if (navigator.onLine) {
+      replayPendingQueue();
+    }
+  }, 1000);
+}
 
 const clearCache = (sheetName?: string) => {
   if (sheetName) {
@@ -78,9 +219,20 @@ const formatDataForSheet = (data: any): any => {
 };
 
 export const apiService = {
-  // Read Sheet with Cache
-  readSheet: async (sheetName: string, forceRefresh = false, retries = 3) => {
-    // 1. Check Cache first (Bypass cache for 'Image' to always get fresh images up to pageSize)
+  // Read Sheet with Cache and Offline fallback
+  readSheet: async (sheetName: string, forceRefresh = false, retries = 3): Promise<any> => {
+    // 1. If completely offline, return cached data immediately (even if expired)
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      console.log(`[OFFLINE] Navigator offline, using cached data for: ${sheetName}`);
+      const cachedData = getCache(sheetName, true);
+      if (cachedData) {
+        triggerOfflineStatus(true);
+        return cachedData;
+      }
+      return [];
+    }
+
+    // 2. Check Cache first (Bypass cache for 'Image' to always get fresh images up to pageSize)
     if (!forceRefresh && sheetName !== 'Image') {
       const cachedData = getCache(sheetName);
       if (cachedData) {
@@ -152,6 +304,7 @@ export const apiService = {
         if (sheetName !== 'Image') {
           setCache(sheetName, data);
         }
+        triggerOfflineStatus(false);
         return data;
       }
       
@@ -162,6 +315,15 @@ export const apiService = {
         await new Promise(resolve => setTimeout(resolve, delay));
         return apiService.readSheet(sheetName, forceRefresh, retries - 1);
       }
+      
+      // Network/Fetch failed (weak connection or server down) - Fallback to cached data even if expired!
+      console.warn(`[OFFLINE FALLBACK] Fetch failed for ${sheetName}, attempting to use cache...`);
+      const cachedData = getCache(sheetName, true);
+      if (cachedData) {
+        triggerOfflineStatus(true);
+        return cachedData;
+      }
+
       if (error && error.message && error.message.includes('404')) {
         console.warn(`[API] Optional sheet ${sheetName} not found (404) during read operation.`);
       } else {
@@ -171,8 +333,16 @@ export const apiService = {
     }
   },
 
-  // Thêm mới 1 dòng
+  // Thêm mới 1 dòng (có hỗ trợ Offline Queue)
   createRecord: async (sheetName: string, data: any, retries = 2): Promise<any> => {
+    // Nếu hoàn toàn offline, lưu vào Queue ngay lập tức
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      console.log(`[OFFLINE] Completely offline, queueing create record for: ${sheetName}`);
+      addToQueue('create', sheetName, undefined, data);
+      triggerOfflineStatus(true);
+      return { success: true, offlineQueued: true, message: 'Đang ngoại tuyến, thao tác đã được lưu tạm' };
+    }
+
     try {
       const formattedData = formatDataForSheet(data);
       const response = await fetch(API_URL, {
@@ -195,13 +365,22 @@ export const apiService = {
           return apiService.createRecord(sheetName, data, retries - 1);
         }
         
-        return { success: false, message: 'Server trả về định dạng không hợp lệ (Mã: ' + response.status + ')' };
+        return { success: false, message: 'Server trả về định dạng không hợp lệ' };
       }
       
       if (result.success) clearCache(sheetName);
       return result;
     } catch (error) {
       console.error(`Create error on ${sheetName}:`, error);
+      
+      // Nếu lỗi kết nối mạng, cho vào Queue ngoại tuyến!
+      if (error instanceof TypeError || String(error).includes('fetch') || String(error).includes('Network')) {
+        console.warn(`[OFFLINE] Network fetch error during create, queueing operation for: ${sheetName}`);
+        addToQueue('create', sheetName, undefined, data);
+        triggerOfflineStatus(true);
+        return { success: true, offlineQueued: true, message: 'Lỗi mạng, thao tác đã được lưu tạm ngoại tuyến' };
+      }
+
       if (retries > 0) {
         await new Promise(r => setTimeout(r, 1000));
         return apiService.createRecord(sheetName, data, retries - 1);
@@ -210,8 +389,16 @@ export const apiService = {
     }
   },
 
-  // Cập nhật 1 dòng
+  // Cập nhật 1 dòng (có hỗ trợ Offline Queue)
   updateRecord: async (sheetName: string, id: string, data: any, retries = 2): Promise<any> => {
+    // Nếu hoàn toàn offline, lưu vào Queue ngay lập tức
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      console.log(`[OFFLINE] Completely offline, queueing update record for: ${sheetName}`);
+      addToQueue('update', sheetName, id, data);
+      triggerOfflineStatus(true);
+      return { success: true, offlineQueued: true, message: 'Đang ngoại tuyến, thao tác đã được lưu tạm' };
+    }
+
     try {
       const formattedData = formatDataForSheet(data);
       const response = await fetch(API_URL, {
@@ -234,13 +421,22 @@ export const apiService = {
           return apiService.updateRecord(sheetName, id, data, retries - 1);
         }
 
-        return { success: false, message: 'Server trả về định dạng không hợp lệ (Mã: ' + response.status + ')' };
+        return { success: false, message: 'Server trả về định dạng không hợp lệ' };
       }
       
       if (result.success) clearCache(sheetName);
       return result;
     } catch (error) {
       console.error(`Update error on ${sheetName}:`, error);
+
+      // Nếu lỗi kết nối mạng, cho vào Queue ngoại tuyến!
+      if (error instanceof TypeError || String(error).includes('fetch') || String(error).includes('Network')) {
+        console.warn(`[OFFLINE] Network fetch error during update, queueing operation for: ${sheetName}`);
+        addToQueue('update', sheetName, id, data);
+        triggerOfflineStatus(true);
+        return { success: true, offlineQueued: true, message: 'Lỗi mạng, thao tác đã được lưu tạm ngoại tuyến' };
+      }
+
       if (retries > 0) {
         await new Promise(r => setTimeout(r, 1000));
         return apiService.updateRecord(sheetName, id, data, retries - 1);
@@ -249,8 +445,16 @@ export const apiService = {
     }
   },
 
-  // Xóa 1 dòng
+  // Xóa 1 dòng (có hỗ trợ Offline Queue)
   deleteRecord: async (sheetName: string, id: string, retries = 2): Promise<any> => {
+    // Nếu hoàn toàn offline, lưu vào Queue ngay lập tức
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      console.log(`[OFFLINE] Completely offline, queueing delete record for: ${sheetName}`);
+      addToQueue('delete', sheetName, id, undefined);
+      triggerOfflineStatus(true);
+      return { success: true, offlineQueued: true, message: 'Đang ngoại tuyến, thao tác đã được lưu tạm' };
+    }
+
     try {
       const response = await fetch(API_URL, {
         method: 'POST',
@@ -272,13 +476,22 @@ export const apiService = {
           return apiService.deleteRecord(sheetName, id, retries - 1);
         }
 
-        return { success: false, message: 'Server trả về định dạng không hợp lệ (Mã: ' + response.status + ')' };
+        return { success: false, message: 'Server trả về định dạng không hợp lệ' };
       }
       
       if (result.success) clearCache(sheetName);
       return result;
     } catch (error) {
       console.error(`Delete error on ${sheetName}:`, error);
+
+      // Nếu lỗi kết nối mạng, cho vào Queue ngoại tuyến!
+      if (error instanceof TypeError || String(error).includes('fetch') || String(error).includes('Network')) {
+        console.warn(`[OFFLINE] Network fetch error during delete, queueing operation for: ${sheetName}`);
+        addToQueue('delete', sheetName, id, undefined);
+        triggerOfflineStatus(true);
+        return { success: true, offlineQueued: true, message: 'Lỗi mạng, thao tác đã được lưu tạm ngoại tuyến' };
+      }
+
       if (retries > 0) {
         await new Promise(r => setTimeout(r, 1000));
         return apiService.deleteRecord(sheetName, id, retries - 1);
@@ -287,13 +500,81 @@ export const apiService = {
     }
   },
 
+  // Raw write methods used solely during queue replay to bypass queueing on network errors
+  createRecordRaw: async (sheetName: string, data: any, retries = 1): Promise<any> => {
+    try {
+      const formattedData = formatDataForSheet(data);
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'create', sheet: sheetName, data: formattedData }),
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        redirect: 'follow'
+      });
+      const text = await response.text();
+      const result = JSON.parse(text);
+      if (result.success) clearCache(sheetName);
+      return result;
+    } catch (e) {
+      console.error(`[API] Raw create failed on ${sheetName}:`, e);
+      if (retries > 0) {
+        await new Promise(r => setTimeout(r, 1000));
+        return apiService.createRecordRaw(sheetName, data, retries - 1);
+      }
+      return { success: false };
+    }
+  },
+
+  updateRecordRaw: async (sheetName: string, id: string, data: any, retries = 1): Promise<any> => {
+    try {
+      const formattedData = formatDataForSheet(data);
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'update', sheet: sheetName, id, data: formattedData }),
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        redirect: 'follow'
+      });
+      const text = await response.text();
+      const result = JSON.parse(text);
+      if (result.success) clearCache(sheetName);
+      return result;
+    } catch (e) {
+      console.error(`[API] Raw update failed on ${sheetName}:`, e);
+      if (retries > 0) {
+        await new Promise(r => setTimeout(r, 1000));
+        return apiService.updateRecordRaw(sheetName, id, data, retries - 1);
+      }
+      return { success: false };
+    }
+  },
+
+  deleteRecordRaw: async (sheetName: string, id: string, retries = 1): Promise<any> => {
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'delete', sheet: sheetName, id }),
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        redirect: 'follow'
+      });
+      const text = await response.text();
+      const result = JSON.parse(text);
+      if (result.success) clearCache(sheetName);
+      return result;
+    } catch (e) {
+      console.error(`[API] Raw delete failed on ${sheetName}:`, e);
+      if (retries > 0) {
+        await new Promise(r => setTimeout(r, 1000));
+        return apiService.deleteRecordRaw(sheetName, id, retries - 1);
+      }
+      return { success: false };
+    }
+  },
+
   // Upload ảnh lên Drive và lưu vào sheet Image (Kế thừa từ dự án Photo mới)
   uploadImage: async (base64: string, filename: string, category: string) => {
     try {
-      // Structure based on user's project doPost
       const payload = {
         fileName: filename,
-        fileType: 'image/jpeg', // Default or derived
+        fileType: 'image/jpeg',
         base64: base64.includes('base64,') ? base64.split('base64,')[1] : base64,
         sheetId: IMAGE_SHEET_ID,
         category: category
@@ -306,8 +587,6 @@ export const apiService = {
         redirect: 'follow'
       });
       
-      // Note: GAS doPost typically returns a JSON string, but if mode: 'no-cors' is used, we can't read it.
-      // However, our fetch above doesn't use no-cors, so we should be able to read if configured.
       const result = await response.json();
       if (result && (result.status === 'success' || result.success)) {
         clearCache('Image');

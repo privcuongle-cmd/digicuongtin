@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback, useRef } from 'react';
 import { AppState, Product, Customer, Supplier, Invoice, ImportOrder, CashTransaction, POSDraft, ImportDraft, MaintenanceRecord, MaintenanceTransfer, ReturnImportOrder, ReturnSalesOrder, User, Serial, StockCard, PrintSettings, ExternalSerial, ImageItem, Task, TelegramSettings, WifiRecord, CameraAccountRecord, CameraInstallation, Wallet } from '../types';
-import { apiService } from '../services/api';
+import { apiService, getPendingQueue, replayPendingQueue } from '../services/api';
 import { generateId, resolveIdCollision } from '../lib/idUtils';
 import { formatDateTime, padPhone, formatSnForDb, parseSnFromDb, parseFormattedNumber } from '../lib/utils';
 import { sendNotification, sendTelegramMessage } from '../lib/notification';
@@ -58,7 +58,13 @@ interface AppContextProps extends AppState {
   deleteWallet: (id: string) => void;
   addCategory: (category: { name: string }) => Promise<void>;
   addBrand: (brand: { name: string }) => Promise<void>;
-  syncData: () => Promise<void>;
+  syncData: (forceRefresh?: boolean) => Promise<void>;
+  offlineState: {
+    offline: boolean;
+    pendingCount: number;
+    isSyncing: boolean;
+  };
+  replayPendingQueue: () => Promise<void>;
 }
 
 const defaultPrintSettings: PrintSettings = {
@@ -149,6 +155,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   });
 
   const [isLoading, setIsLoading] = useState(true);
+
+  const [offlineState, setOfflineState] = useState(() => {
+    return {
+      offline: typeof navigator !== 'undefined' ? !navigator.onLine : false,
+      pendingCount: typeof window !== 'undefined' ? getPendingQueue().length : 0,
+      isSyncing: false
+    };
+  });
 
   const stateRef = useRef(state);
   useEffect(() => {
@@ -694,6 +708,33 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setIsLoading(false);
       }
     }, [state.products.length, state.customers.length, state.invoices.length]);
+
+  // Listen to network status changes and offline queue sync events
+  useEffect(() => {
+    const handleOfflineChange = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail) {
+        setOfflineState({
+          offline: customEvent.detail.offline,
+          pendingCount: customEvent.detail.pendingCount,
+          isSyncing: customEvent.detail.isSyncing
+        });
+      }
+    };
+
+    const handleSyncCompleted = () => {
+      console.log('[OFFLINE STATE] Offline sync completed, auto refreshing state...');
+      syncData(true);
+    };
+
+    window.addEventListener('offline-status-change', handleOfflineChange);
+    window.addEventListener('offline-sync-completed', handleSyncCompleted);
+
+    return () => {
+      window.removeEventListener('offline-status-change', handleOfflineChange);
+      window.removeEventListener('offline-sync-completed', handleSyncCompleted);
+    };
+  }, [syncData]);
 
   // Fetch data from Google Sheets on mount
   useEffect(() => {
@@ -2400,7 +2441,9 @@ ${updates.purchaseId ? `<b>Đơn hàng liên kết:</b> ${updates.purchaseId}\n`
       deleteWallet,
       addCategory,
       addBrand,
-      syncData
+      syncData,
+      offlineState,
+      replayPendingQueue
     }}>
       {children}
     </AppContext.Provider>
