@@ -8,7 +8,7 @@ import { useMobileBackModal } from '../hooks/useMobileBackModal';
 import { formatDateTime, parseDateString } from '../lib/utils';
 
 export const WifiManagement: React.FC = () => {
-  const { customers, wifiRecords, addWifiRecord, updateWifiRecord, deleteWifiRecord, currentUser } = useAppContext();
+  const { customers, wifiRecords, addWifiRecord, updateWifiRecord, deleteWifiRecord, currentUser, addCustomer } = useAppContext();
   const location = useLocation();
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -28,6 +28,7 @@ export const WifiManagement: React.FC = () => {
   
   const [customerSuggestions, setCustomerSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [activeSearchField, setActiveSearchField] = useState<'name' | 'phone' | null>(null);
 
   const filteredRecords = useMemo(() => {
     return wifiRecords.filter(r => 
@@ -47,6 +48,7 @@ export const WifiManagement: React.FC = () => {
 
   const handleCustomerSearch = (val: string) => {
     setCustomerName(val);
+    setActiveSearchField('name');
     if (val.length > 1) {
       const filtered = customers.filter(c => 
         c.name.toLowerCase().includes(val.toLowerCase()) || 
@@ -59,12 +61,39 @@ export const WifiManagement: React.FC = () => {
     }
   };
 
+  const handlePhoneSearch = (val: string) => {
+    setCustomerPhone(val);
+    setActiveSearchField('phone');
+
+    // Auto-fill check: if there is an exact match for phone number, auto-load customer details
+    const exactMatch = customers.find(c => c.phone === val || c.phone.replace(/[\s.-]/g, '') === val.replace(/[\s.-]/g, ''));
+    if (exactMatch) {
+      setCustomerName(exactMatch.name);
+      setCustomerId(exactMatch.id || '');
+      setCustomerAddress(exactMatch.address || exactMatch.location || '');
+      setShowSuggestions(false);
+      return;
+    }
+
+    if (val.length > 1) {
+      const filtered = customers.filter(c => 
+        c.phone.includes(val) || 
+        c.name.toLowerCase().includes(val.toLowerCase())
+      ).slice(0, 5);
+      setCustomerSuggestions(filtered);
+      setShowSuggestions(true);
+    } else {
+      setShowSuggestions(false);
+    }
+  };
+
   const selectCustomer = (c: any) => {
     setCustomerName(c.name);
     setCustomerPhone(c.phone);
     setCustomerId(c.id || '');
-    setCustomerAddress(c.address || '');
+    setCustomerAddress(c.address || c.location || '');
     setShowSuggestions(false);
+    setActiveSearchField(null);
   };
 
   const resetForm = () => {
@@ -75,7 +104,7 @@ export const WifiManagement: React.FC = () => {
     setWifiName('');
     setNote('');
     setEditingRecord(null);
-    setIsEditing(false);
+    setIsEditing(true); // Default to true when adding new
   };
 
   const handleSave = () => {
@@ -84,8 +113,27 @@ export const WifiManagement: React.FC = () => {
       return;
     }
 
+    // Auto-create customer if they don't exist in database
+    let finalCustomerId = customerId;
+    if (!finalCustomerId && customerName) {
+      const existing = customers.find(c => c.phone === customerPhone);
+      if (existing) {
+        finalCustomerId = existing.id;
+      } else {
+        const newCust = addCustomer({
+          id: generateId('KH', customers),
+          name: customerName,
+          phone: customerPhone,
+          address: customerAddress,
+          createdAt: formatDateTime(new Date()),
+          createdBy: currentUser?.name || 'Admin'
+        });
+        finalCustomerId = newCust.id;
+      }
+    }
+
     const recordData = {
-      customerId,
+      customerId: finalCustomerId,
       customerName,
       customerPhone,
       customerAddress,
@@ -180,10 +228,11 @@ export const WifiManagement: React.FC = () => {
                     placeholder="Tên khách hàng"
                     value={customerName}
                     onChange={(e) => isEditing && handleCustomerSearch(e.target.value)}
+                    onFocus={() => isEditing && customerName.length > 0 && setShowSuggestions(true)}
                     readOnly={!isEditing}
                   />
-                  {isEditing && showSuggestions && customerSuggestions.length > 0 && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
+                  {isEditing && showSuggestions && activeSearchField === 'name' && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden max-h-[200px] overflow-y-auto">
                       {customerSuggestions.map(c => (
                         <div 
                           key={c.id} 
@@ -194,6 +243,16 @@ export const WifiManagement: React.FC = () => {
                           <div className="text-[11px] text-slate-500">{c.phone}</div>
                         </div>
                       ))}
+                      <div 
+                        className="px-4 py-2.5 bg-slate-50 hover:bg-blue-50 cursor-pointer text-slate-500 font-bold text-xs flex items-center gap-1"
+                        onClick={() => {
+                          setCustomerId('');
+                          setShowSuggestions(false);
+                        }}
+                      >
+                        <span>➕ Tạo mới khách hàng: </span>
+                        <span className="text-blue-600 font-black">{customerName}</span>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -201,7 +260,7 @@ export const WifiManagement: React.FC = () => {
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex-1">
+                  <div className="flex-1 relative">
                     <div className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">Số điện thoại</div>
                     <div className="flex items-center gap-2">
                       <input 
@@ -209,11 +268,37 @@ export const WifiManagement: React.FC = () => {
                         className={`bg-transparent border-none focus:ring-0 p-0 text-[14px] font-bold text-slate-700 w-full ${!isEditing ? 'cursor-default' : ''}`}
                         placeholder="Số điện thoại"
                         value={customerPhone}
-                        onChange={(e) => isEditing && setCustomerPhone(e.target.value)}
+                        onChange={(e) => isEditing && handlePhoneSearch(e.target.value)}
+                        onFocus={() => isEditing && customerPhone.length > 0 && setShowSuggestions(true)}
                         readOnly={!isEditing}
                       />
                       <button onClick={() => handleCopy(customerPhone)} className="text-slate-300 p-1 shrink-0"><Copy size={14} /></button>
                     </div>
+
+                    {isEditing && showSuggestions && activeSearchField === 'phone' && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden max-h-[200px] overflow-y-auto">
+                        {customerSuggestions.map(c => (
+                          <div 
+                            key={c.id} 
+                            className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer border-b border-slate-50 last:border-0"
+                            onClick={() => selectCustomer(c)}
+                          >
+                            <div className="font-bold text-slate-700 text-sm">{c.name}</div>
+                            <div className="text-[11px] text-slate-500">{c.phone}</div>
+                          </div>
+                        ))}
+                        <div 
+                          className="px-4 py-2.5 bg-slate-50 hover:bg-blue-50 cursor-pointer text-slate-500 font-bold text-xs flex items-center gap-1"
+                          onClick={() => {
+                            setCustomerId('');
+                            setShowSuggestions(false);
+                          }}
+                        >
+                          <span>➕ Tạo mới với SĐT: </span>
+                          <span className="text-blue-600 font-black">{customerPhone}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="flex gap-1.5 shrink-0">
                     <button 
@@ -234,7 +319,12 @@ export const WifiManagement: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-50">
                   <div>
                     <div className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">Mã khách hàng</div>
-                    <div className="text-[12px] font-bold text-slate-700">{customerId || '--'}</div>
+                    <div className="text-[12px] font-bold text-slate-700">
+                      {customerId || '--'}
+                      {!customerId && customerName && (
+                        <span className="text-[10px] text-blue-600 font-bold ml-1 block">(Sẽ tạo tự động)</span>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <div className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">Thời gian</div>
@@ -325,6 +415,7 @@ export const WifiManagement: React.FC = () => {
       setCustomerPhone(c.phone);
       setCustomerId(c.id || '');
       setCustomerAddress(c.address || c.location || '');
+      setIsEditing(true);
       setShowAddModal(true);
       // Clear state after reading
       window.history.replaceState({}, document.title);
