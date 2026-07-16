@@ -1504,9 +1504,24 @@ return (
             <div className="p-6">
               <p className="md:text-sm text-xs font-bold text-blue-600 mb-4 tracking-tighter">{activeSerialProduct.name}</p>
               <div className="grid grid-cols-1 gap-2 max-h-[300px] overflow-y-auto pr-1">
-                {serials
-                  .filter(s => s.prodId === activeSerialProduct.id && (s.status !== 'SOLD' || (currentTab.editingInvoiceId && s.refId === currentTab.editingInvoiceId)) && !cart.find(item => item.id === activeSerialProduct.id)?.serials?.includes(s.sn))
-                  .map((s, sIdx) => (
+                {(() => {
+                  const seen = new Set<string>();
+                  const filtered = serials
+                    .filter(s => s.prodId === activeSerialProduct.id && (s.status !== 'SOLD' || (currentTab.editingInvoiceId && s.refId === currentTab.editingInvoiceId)) && !cart.find(item => item.id === activeSerialProduct.id)?.serials?.includes(s.sn))
+                    .filter(s => {
+                      const upperSn = s.sn.toUpperCase();
+                      if (seen.has(upperSn)) return false;
+                      seen.add(upperSn);
+                      return true;
+                    });
+                  
+                  if (filtered.length === 0) {
+                    return (
+                      <p className="text-center text-slate-400 md:text-sm text-xs py-10 font-bold uppercase tracking-widest italic opacity-60">Hết IMEI khả dụng trong kho</p>
+                    );
+                  }
+                  
+                  return filtered.map((s, sIdx) => (
                     <button 
                       key={`${s.sn}-${sIdx}`}
                       onClick={() => {
@@ -1518,11 +1533,8 @@ return (
                       <span className="font-mono font-bold text-slate-800 md:text-base text-xs">{s.sn}</span>
                       <Plus size={16} className="text-blue-600 group-hover:scale-110 transition-transform" />
                     </button>
-                  ))
-                }
-                {serials.filter(s => s.prodId === activeSerialProduct.id && (s.status !== 'SOLD' || (currentTab.editingInvoiceId && s.refId === currentTab.editingInvoiceId)) && !cart.find(item => item.id === activeSerialProduct.id)?.serials?.includes(s.sn)).length === 0 && (
-                  <p className="text-center text-slate-400 md:text-sm text-xs py-10 font-bold uppercase tracking-widest italic opacity-60">Hết IMEI khả dụng trong kho</p>
-                )}
+                  ));
+                })()}
               </div>
             </div>
           </div>

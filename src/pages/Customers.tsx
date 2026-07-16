@@ -22,12 +22,56 @@ export const Customers: React.FC = () => {
     uploadImage, addWifiRecord, addCameraAccount, addCameraInstallation, addMaintenanceRecord, addTask 
   } = useAppContext();
   const navigate = useNavigate();
+  const getTaskStatusStyle = (status: string) => {
+    switch (status) {
+      case 'TODO':
+      case 'OPEN': return 'bg-slate-50 text-slate-600 border-slate-200';
+      case 'ACCEPTED':
+      case 'IN_PROGRESS': return 'bg-blue-50 text-blue-600 border-blue-200';
+      case 'COMPLETED': return 'bg-emerald-50 text-emerald-600 border-emerald-200';
+      case 'CANCELLED': return 'bg-rose-50 text-rose-600 border-rose-200';
+      default: return 'bg-slate-50 text-slate-600 border-slate-200';
+    }
+  };
+
+  const getTaskStatusText = (status: string) => {
+    switch (status) {
+      case 'TODO':
+      case 'OPEN': return 'MỚI TẠO';
+      case 'ACCEPTED': return 'ĐÃ NHẬN';
+      case 'IN_PROGRESS': return 'ĐANG XỬ LÝ';
+      case 'COMPLETED': return 'HOÀN THÀNH';
+      case 'CANCELLED': return 'ĐÃ HỦY';
+      default: return status;
+    }
+  };
+
+  const getPriorityStyle = (priority: string) => {
+    switch (priority) {
+      case 'LOW': return 'text-slate-500 bg-slate-100';
+      case 'MEDIUM': return 'text-blue-600 bg-blue-100';
+      case 'HIGH': return 'text-orange-600 bg-orange-100';
+      case 'CRITICAL': return 'text-rose-600 bg-rose-100';
+      default: return 'text-slate-500 bg-slate-100';
+    }
+  };
+
+  const getPriorityText = (priority: string) => {
+    switch (priority) {
+      case 'LOW': return 'Thấp';
+      case 'MEDIUM': return 'TB';
+      case 'HIGH': return 'Cao';
+      case 'CRITICAL': return 'Khẩn cấp';
+      default: return priority;
+    }
+  };
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [selectedCameraInstall, setSelectedCameraInstall] = useState<CameraInstallation | null>(null);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<'info' | 'history' | 'warranty' | 'tasks' | 'camera_installations'>('info');
   const [isLocating, setIsLocating] = useState(false);
   const [viewImage, setViewImage] = useState<string | null>(null);
@@ -117,11 +161,12 @@ export const Customers: React.FC = () => {
   const [paymentWalletId, setPaymentWalletId] = useState<string>('');
 
   // Lock scroll when modals are open
-  useScrollLock(isModalOpen || !!selectedCustomer || !!selectedInvoice || isPaymentModalOpen);
+  useScrollLock(isModalOpen || !!selectedCustomer || !!selectedInvoice || isPaymentModalOpen || !!selectedTask);
 
   // Handle Escape key to close modals in layers
   useEscapeKey(() => setIsPaymentModalOpen(false), isPaymentModalOpen);
   useEscapeKey(() => setSelectedInvoice(null), !!selectedInvoice);
+  useEscapeKey(() => setSelectedTask(null), !!selectedTask);
   useEscapeKey(() => setSelectedCustomer(null), !!selectedCustomer);
   useEscapeKey(() => { setIsModalOpen(false); resetForm(); }, isModalOpen);
   useEscapeKey(() => setAddModalType(null), !!addModalType);
@@ -265,19 +310,21 @@ export const Customers: React.FC = () => {
     addCashTransaction(newTransaction);
     setIsPaymentModalOpen(false);
     
-    if (confirm('Thu nợ thành công! Bạn có muốn in phiếu thu không?')) {
-      handlePrint({
-        title: 'PHIẾU THU TIỀN',
-        id: transactionId,
-        date: newTransaction.date,
-        partner: newTransaction.partner,
-        total: newTransaction.amount,
-        paid: newTransaction.amount,
-        debt: 0,
-        note: newTransaction.note,
-        type: 'THU'
-      });
-    }
+    setTimeout(() => {
+      if (confirm('Thu nợ thành công! Bạn có muốn in phiếu thu không?')) {
+        handlePrint({
+          title: 'PHIẾU THU TIỀN',
+          id: transactionId,
+          date: newTransaction.date,
+          partner: newTransaction.partner,
+          total: newTransaction.amount,
+          paid: newTransaction.amount,
+          debt: 0,
+          note: newTransaction.note,
+          type: 'THU'
+        });
+      }
+    }, 100);
   };
 
 
@@ -285,6 +332,7 @@ export const Customers: React.FC = () => {
   useMobileBackModal(isPaymentModalOpen, () => setIsPaymentModalOpen(false));
   useMobileBackModal(!!selectedCustomer, () => setSelectedCustomer(null));
   useMobileBackModal(!!selectedInvoice, () => setSelectedInvoice(null));
+  useMobileBackModal(!!selectedTask, () => setSelectedTask(null));
   useMobileBackModal(!!addModalType, () => setAddModalType(null));
 
 return (
@@ -760,6 +808,16 @@ return (
                         <div className="text-sm font-bold text-slate-900">{selectedCustomer.createdBy || 'Hệ thống'}</div>
                       </div>
                     </div>
+
+                    {/* Note */}
+                    <div className="border-t border-slate-100 pt-3 mt-2">
+                      <div className="text-[13px] text-slate-500 mb-1 flex items-center gap-1.5 font-normal">
+                        <Edit3 size={14} className="text-slate-400" /> Ghi chú
+                      </div>
+                      <div className="text-sm font-normal text-slate-700 whitespace-pre-wrap bg-amber-50/60 border border-amber-100 rounded-xl p-3 leading-relaxed min-h-[40px]">
+                        {selectedCustomer.note || <span className="text-slate-400 italic font-normal">Chưa có ghi chú</span>}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -1138,13 +1196,17 @@ return (
                              <p className="text-slate-400 text-[13px] font-normal">Chưa có công việc nào</p>
                            </div>
                          ) : customerTasks.map(task => (
-                           <div key={task.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                           <div 
+                             key={task.id} 
+                             onClick={() => setSelectedTask(task)}
+                             className="p-3 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 rounded-lg border border-slate-100 cursor-pointer hover:border-slate-300 transition-all shadow-xs"
+                           >
                              <div className="flex justify-between items-center mb-1">
                                <span className={`font-normal text-[13px] ${task.status !== 'COMPLETED' ? 'text-red-600' : 'text-slate-800'}`}>{task.title}</span>
                              </div>
                              <div className="flex justify-between items-center gap-2 flex-wrap mt-2">
                                <span className="flex items-center gap-1 text-[11px] text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
-                                  {task.status} • {task.priority}
+                                  Giao việc: {formatDateTime(task.createdAt)}
                                </span>
                                {task.dueDate && <span className="text-[11px] font-normal text-red-400 whitespace-nowrap">{formatDateTime(task.dueDate)}</span>}
                              </div>
@@ -1234,50 +1296,6 @@ return (
                   ))
                 ).sort((a, b) => parseDateString(b.date) - parseDateString(a.date));
 
-                const getTaskStatusStyle = (status: string) => {
-                  switch (status) {
-                    case 'TODO':
-                    case 'OPEN': return 'bg-slate-50 text-slate-600 border-slate-200';
-                    case 'ACCEPTED':
-                    case 'IN_PROGRESS': return 'bg-blue-50 text-blue-600 border-blue-200';
-                    case 'COMPLETED': return 'bg-emerald-50 text-emerald-600 border-emerald-200';
-                    case 'CANCELLED': return 'bg-rose-50 text-rose-600 border-rose-200';
-                    default: return 'bg-slate-50 text-slate-600 border-slate-200';
-                  }
-                };
-
-                const getTaskStatusText = (status: string) => {
-                  switch (status) {
-                    case 'TODO':
-                    case 'OPEN': return 'MỚI TẠO';
-                    case 'ACCEPTED': return 'ĐÃ NHẬN';
-                    case 'IN_PROGRESS': return 'ĐANG XỬ LÝ';
-                    case 'COMPLETED': return 'HOÀN THÀNH';
-                    case 'CANCELLED': return 'ĐÃ HỦY';
-                    default: return status;
-                  }
-                };
-
-                const getPriorityStyle = (priority: string) => {
-                  switch (priority) {
-                    case 'LOW': return 'text-slate-500 bg-slate-100';
-                    case 'MEDIUM': return 'text-blue-600 bg-blue-100';
-                    case 'HIGH': return 'text-orange-600 bg-orange-100';
-                    case 'CRITICAL': return 'text-rose-600 bg-rose-100';
-                    default: return 'text-slate-500 bg-slate-100';
-                  }
-                };
-
-                const getPriorityText = (priority: string) => {
-                  switch (priority) {
-                    case 'LOW': return 'Thấp';
-                    case 'MEDIUM': return 'TB';
-                    case 'HIGH': return 'Cao';
-                    case 'CRITICAL': return 'Khẩn cấp';
-                    default: return priority;
-                  }
-                };
-
                 const getWarrantyStatusStyle = (status: string) => {
                   switch (status) {
                     case 'RECEIVING': return 'bg-blue-50 text-blue-600 border-blue-100';
@@ -1315,7 +1333,8 @@ return (
                         customerTasks.map(task => (
                           <div 
                             key={task.id} 
-                            className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 transition-all group/task block"
+                            onClick={() => setSelectedTask(task)}
+                            className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 transition-all group/task block cursor-pointer"
                           >
                             <div className="flex flex-col md:flex-row justify-between gap-4">
                               <div className="flex gap-4">
@@ -1325,11 +1344,8 @@ return (
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-2 mb-1">
                                     <span className="text-[10px] font-normal bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded italic">#{task.id}</span>
-                                    <span className={`text-[9px] font-normal px-2 py-0.5 rounded-full border ${getTaskStatusStyle(task.status)} tracking-widest`}>
-                                      {getTaskStatusText(task.status)}
-                                    </span>
-                                    <span className={`text-[9px] font-normal px-2 py-0.5 rounded-full ${getPriorityStyle(task.priority)} tracking-widest`}>
-                                      {getPriorityText(task.priority)}
+                                    <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-100 tracking-tight">
+                                      Thời gian giao: {formatDateTime(task.createdAt)}
                                     </span>
                                   </div>
                                   <p className={`font-bold text-sm mb-1 ${task.status !== 'COMPLETED' ? 'text-red-600' : 'text-slate-800'}`}>{task.title}</p>
@@ -1504,6 +1520,14 @@ return (
                         <div className="border-b border-slate-100 pb-2">
                           <p className="text-[13px] text-slate-600 mb-1">Địa chỉ</p>
                           <p className="text-[15px] text-slate-800 font-medium">{selectedCustomer.address || <span className="text-slate-400">Chưa có</span>}</p>
+                        </div>
+                        <div className="md:col-span-3 border-t border-slate-100 pt-4 mt-2">
+                          <p className="text-[13px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                            <Edit3 size={14} className="text-slate-400" /> Ghi chú khách hàng
+                          </p>
+                          <div className="bg-amber-50/60 border border-amber-100 rounded-xl p-3 text-[14px] text-slate-700 whitespace-pre-wrap min-h-[50px] leading-relaxed font-normal">
+                            {selectedCustomer.note || <span className="text-slate-400 italic font-normal">Chưa có ghi chú</span>}
+                          </div>
                         </div>
                       </div>
 
@@ -1721,10 +1745,14 @@ return (
                               <p className="text-[13px] text-slate-400 italic text-center mt-4">Không có công việc</p>
                             ) : (
                               customerTasks.map(t => (
-                                <div key={t.id} className="bg-white border border-slate-100 rounded p-3 shadow-sm text-[13px]">
+                                <div 
+                                  key={t.id} 
+                                  onClick={() => setSelectedTask(t)}
+                                  className="bg-white border border-slate-100 rounded p-3 shadow-sm text-[13px] cursor-pointer hover:bg-slate-50 hover:border-blue-200 transition-all"
+                                >
                                   <div className="flex justify-between items-start mb-1.5">
                                     <div className="font-normal text-slate-800 line-clamp-1 flex-1 pr-2">{t.title}</div>
-                                    <div className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${t.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{getTaskStatusText(t.status)}</div>
+                                    <div className="text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap bg-blue-50 text-blue-600 border border-blue-100 font-bold">Giao: {formatDateTime(t.createdAt)}</div>
                                   </div>
                                   {t.dueDate && (
                                     <div className="text-slate-500 text-[11px] flex items-center gap-1.5 mt-1">
@@ -1738,11 +1766,7 @@ return (
                         </div>
                       </div>
 
-                      {/* Note */}
-                      <div className="flex items-center gap-2 text-[14px] text-slate-700 mb-auto pb-6">
-                        <Edit3 size={16} className="text-slate-500 shrink-0" />
-                        <span className="whitespace-pre-wrap">{selectedCustomer.note || 'Chưa có ghi chú'}</span>
-                      </div>
+                      <div className="mb-auto pb-6"></div>
 
                       {/* Footer Buttons */}
                       <div className="border-t border-slate-200 pt-4 flex justify-between items-center mt-4 min-h-[50px] shrink-0">
@@ -2044,6 +2068,132 @@ return (
             </div>
             <div className="p-4 md:p-6 border-t border-slate-100 bg-white shrink-0">
                <button onClick={() => setSelectedCameraInstall(null)} className="w-full py-3 bg-slate-900 text-white font-bold rounded-lg uppercase text-[12px] tracking-widest hover:bg-slate-800 transition-colors">Đóng</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Task Detail Modal */}
+      {selectedTask && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center md:p-4 p-0 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl md:rounded-xl rounded-none shadow-2xl overflow-hidden flex flex-col h-full md:max-h-[85vh] md:h-auto animate-in slide-in-from-bottom-4 duration-300">
+            <div className="p-4 md:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+              <div className="flex items-center gap-3">
+                <ClipboardList className="text-blue-600" size={20} />
+                <h3 className="text-[16px] md:text-lg font-normal text-slate-800 uppercase tracking-tighter">Chi tiết công việc</h3>
+              </div>
+              <button 
+                onClick={() => setSelectedTask(null)} 
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-200 text-slate-600 hover:bg-slate-300 transition-colors"
+                aria-label="Đóng"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            <div className="p-4 md:p-6 flex-1 overflow-y-auto space-y-4">
+              {/* Title Section */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tiêu đề</div>
+                <div className="font-bold text-slate-800 text-[15px] leading-relaxed">{selectedTask.title}</div>
+              </div>
+
+              {/* Status and Priority Row */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Trạng thái</div>
+                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${getTaskStatusStyle(selectedTask.status)}`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                    {getTaskStatusText(selectedTask.status)}
+                  </span>
+                </div>
+
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Độ ưu tiên</div>
+                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${getPriorityStyle(selectedTask.priority)}`}>
+                    {getPriorityText(selectedTask.priority)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Due Date and Created At Row */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Hạn chót</div>
+                  <div className="font-medium text-slate-700 text-[13px] flex items-center gap-1.5">
+                    <Calendar size={14} className="text-red-400" />
+                    {selectedTask.dueDate ? formatDateTime(selectedTask.dueDate) : '---'}
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Thời gian tạo</div>
+                  <div className="font-medium text-slate-700 text-[13px] flex items-center gap-1.5">
+                    <History size={14} className="text-slate-400" />
+                    {selectedTask.createdAt ? formatDateTime(selectedTask.createdAt) : '---'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Description Section */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Mô tả / Ghi chú</div>
+                <div className="text-slate-600 text-[13px] leading-relaxed whitespace-pre-wrap min-h-[60px] bg-white p-3 rounded-lg border border-slate-100">
+                  {selectedTask.description || 'Không có mô tả chi tiết'}
+                </div>
+              </div>
+
+              {/* Customer Linkage Info (if available) */}
+              {(selectedTask.customerId || selectedTask.customerPhone || selectedTask.customerAddress) && (
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Thông tin liên quan</div>
+                  
+                  {selectedTask.customerId && (
+                    <div className="text-[13px] text-slate-700 flex items-center gap-2">
+                      <span className="text-slate-400 font-medium">Khách hàng:</span>
+                      <span className="font-bold text-blue-600">
+                        {customers.find(c => c.id === selectedTask.customerId)?.name || selectedTask.customerId}
+                      </span>
+                    </div>
+                  )}
+
+                  {selectedTask.customerPhone && (
+                    <div className="text-[13px] text-slate-700 flex items-center gap-2">
+                      <span className="text-slate-400 font-medium">Số điện thoại:</span>
+                      <button 
+                        onClick={() => handlePhoneCall(selectedTask.customerPhone!)} 
+                        className="font-bold text-blue-600 hover:underline flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-slate-200"
+                      >
+                        <Phone size={12} /> {selectedTask.customerPhone}
+                      </button>
+                    </div>
+                  )}
+
+                  {selectedTask.customerAddress && (
+                    <div className="text-[13px] text-slate-700 flex items-start gap-2">
+                      <span className="text-slate-400 font-medium whitespace-nowrap">Địa chỉ:</span>
+                      <span className="font-medium text-slate-800">{selectedTask.customerAddress}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Assignee Information (if available) */}
+              {selectedTask.assignedTo && (
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Người đảm nhận</div>
+                  <div className="text-slate-700 font-medium text-[13px]">{selectedTask.assignedTo}</div>
+                </div>
+              )}
+            </div>
+            
+            <div className="p-4 md:p-6 border-t border-slate-100 bg-white shrink-0">
+              <button 
+                onClick={() => setSelectedTask(null)} 
+                className="w-full py-3 bg-slate-950 text-white font-bold rounded-lg uppercase text-[12px] tracking-widest hover:bg-slate-800 transition-colors"
+              >
+                Đóng chi tiết
+              </button>
             </div>
           </div>
         </div>

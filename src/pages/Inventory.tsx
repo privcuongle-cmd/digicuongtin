@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, Plus, Box, Wrench, Barcode, X, ArrowDownLeft, ArrowUpRight, FileText, Calendar, User, Package, CreditCard, Truck, Star, Settings, HelpCircle, LayoutGrid, Download, Upload, ChevronDown, Filter, Edit3, Image as ImageIcon, RotateCcw, ExternalLink, Printer, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Search, Plus, Box, Wrench, Barcode, X, ArrowDownLeft, ArrowUpRight, FileText, Calendar, User, Package, CreditCard, Truck, Star, Settings, HelpCircle, LayoutGrid, Download, Upload, ChevronDown, Filter, Edit3, Image as ImageIcon, RotateCcw, ExternalLink, Printer, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Product, Invoice, ImportOrder, ReturnImportOrder, ReturnSalesOrder } from '../types';
 import { formatNumber, parseFormattedNumber, formatDateTime, parseDateString } from '../lib/utils';
@@ -152,6 +152,8 @@ return (
 
     if (activeFilter === 'LOW_STOCK') {
       result = result.filter(p => !p.isService && p.stock !== null && p.stock < (p.lowStockThreshold ?? 5));
+    } else if (activeFilter === 'IN_STOCK') {
+      result = result.filter(p => !p.isService && p.stock !== null && p.stock > 0);
     }
 
     if (!searchTerm.trim()) {
@@ -515,7 +517,7 @@ return (
           </select>
 
           <button 
-            onClick={() => setActiveFilter(activeFilter === 'ALL' ? 'LOW_STOCK' : 'ALL')}
+            onClick={() => setActiveFilter(activeFilter === 'LOW_STOCK' ? 'ALL' : 'LOW_STOCK')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all border shrink-0 ${activeFilter === 'LOW_STOCK' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}
           >
             <AlertTriangle size={16} />
@@ -523,9 +525,17 @@ return (
           </button>
 
           <button 
+            onClick={() => setActiveFilter(activeFilter === 'IN_STOCK' ? 'ALL' : 'IN_STOCK')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all border shrink-0 ${activeFilter === 'IN_STOCK' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}
+          >
+            <CheckCircle size={16} />
+            Đang còn hàng
+          </button>
+
+          <button 
             onClick={handleReconcileStock}
             disabled={isReconciling}
-            className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-lg text-sm font-bold transition-all shrink-0 shadow-sm"
+            className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-lg text-sm font-bold transition-all shrink-0 shadow-sm md:hidden"
           >
             <RotateCcw size={16} className={isReconciling ? "animate-spin" : ""} />
             {isReconciling ? "Cân bằng..." : "Cân bằng kho"}

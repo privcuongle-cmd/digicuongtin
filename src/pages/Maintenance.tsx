@@ -2341,35 +2341,49 @@ return (
               
               <div className="space-y-2 max-h-60 overflow-y-auto no-scrollbar pr-2 mb-4 mt-2 border-t border-slate-50 pt-4">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2">Danh sách Serial trong kho</p>
-                {serials?.filter(s => s.prodId === activeSerialProduct.id && s.status !== 'SOLD').length > 0 ? (
-                  serials.filter(s => s.prodId === activeSerialProduct.id && s.status !== 'SOLD').map(s => {
-                    const isSelected = invoiceItems.find(i => i.id === activeSerialProduct.id)?.serials?.includes(s.sn) || false;
-                    return (
-                      <div 
-                        key={s.sn} 
-                        className={`flex justify-between items-center p-3 rounded-lg border cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-blue-200' : 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm'}`}
-                        onClick={() => {
-                          if (isSelected) {
-                            alert("Serial này đã được chọn!");
-                            return;
-                          }
-                          addInvoiceItem(activeSerialProduct, s.sn);
-                          setIsSerialModalOpen(false);
-                        }}
-                      >
-                        <span className={`font-mono text-sm uppercase tracking-wider ${isSelected ? 'text-blue-700 font-bold' : 'text-slate-700 font-semibold'}`}>{s.sn}</span>
-                        {isSelected && <CheckCircle size={16} className="text-blue-600" />}
+                {(() => {
+                  const seen = new Set<string>();
+                  const filtered = (serials || [])
+                    .filter(s => s.prodId === activeSerialProduct.id && s.status !== 'SOLD')
+                    .filter(s => {
+                      const upperSn = s.sn.toUpperCase();
+                      if (seen.has(upperSn)) return false;
+                      seen.add(upperSn);
+                      return true;
+                    });
+
+                  if (filtered.length > 0) {
+                    return filtered.map(s => {
+                      const isSelected = invoiceItems.find(i => i.id === activeSerialProduct.id)?.serials?.includes(s.sn) || false;
+                      return (
+                        <div 
+                          key={s.sn} 
+                          className={`flex justify-between items-center p-3 rounded-lg border cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-blue-200' : 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm'}`}
+                          onClick={() => {
+                            if (isSelected) {
+                              alert("Serial này đã được chọn!");
+                              return;
+                            }
+                            addInvoiceItem(activeSerialProduct, s.sn);
+                            setIsSerialModalOpen(false);
+                          }}
+                        >
+                          <span className={`font-mono text-sm uppercase tracking-wider ${isSelected ? 'text-blue-700 font-bold' : 'text-slate-700 font-semibold'}`}>{s.sn}</span>
+                          {isSelected && <CheckCircle size={16} className="text-blue-600" />}
+                        </div>
+                      );
+                    });
+                  }
+
+                  return (
+                    <div className="text-center py-6">
+                      <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-2">
+                        <ShoppingBag size={20} className="text-slate-300" />
                       </div>
-                    );
-                  })
-                ) : (
-                  <div className="text-center py-6">
-                    <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-2">
-                      <ShoppingBag size={20} className="text-slate-300" />
+                      <p className="text-slate-400 text-[11px] font-medium">Không có Serial nào sẵn sàng trong kho</p>
                     </div>
-                    <p className="text-slate-400 text-[11px] font-medium">Không có Serial nào sẵn sàng trong kho</p>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
               <div className="flex gap-2">
                 <button onClick={() => setIsSerialModalOpen(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-lg text-xs tracking-wide transition-all hover:bg-slate-200">Bỏ qua</button>
