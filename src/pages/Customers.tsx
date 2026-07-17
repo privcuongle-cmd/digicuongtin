@@ -73,6 +73,7 @@ export const Customers: React.FC = () => {
   const [selectedCameraInstall, setSelectedCameraInstall] = useState<CameraInstallation | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<'info' | 'history' | 'warranty' | 'tasks' | 'camera_installations'>('info');
+  const [txFilter, setTxFilter] = useState<'all' | 'sales' | 'returns'>('all');
   const [isLocating, setIsLocating] = useState(false);
   const [viewImage, setViewImage] = useState<string | null>(null);
   
@@ -582,68 +583,166 @@ return (
                       <ChevronLeft size={24} />
                       <span className="text-lg font-normal">Lịch sử giao dịch</span>
                     </button>
+                    <select 
+                      value={txFilter} 
+                      onChange={(e) => setTxFilter(e.target.value as any)}
+                      className="border border-slate-200 rounded-lg text-xs px-2 py-1 focus:ring-1 focus:ring-blue-500 focus:outline-none bg-white text-slate-700"
+                    >
+                      <option value="all">Tất cả</option>
+                      <option value="sales">Bán hàng</option>
+                      <option value="returns">Trả hàng</option>
+                    </select>
                   </div>
                   <div className="flex-1 overflow-y-auto pb-8 p-3 space-y-3">
                      {(() => {
                         const stats = getCustomerStats(selectedCustomer);
-                        if (stats.invoices.length === 0) {
+                        const customerInvoices = invoices.filter(inv => {
+                          const matchId = !!(inv.customerId && inv.customerId === selectedCustomer.id);
+                          const matchPhone = !!(inv.phone && inv.phone !== '---' && selectedCustomer.phone && inv.phone.trim() === selectedCustomer.phone.trim());
+                          const matchName = !!(inv.customer && selectedCustomer.name && inv.customer.trim().toLowerCase() === selectedCustomer.name.trim().toLowerCase());
+                          return matchId || (!inv.customerId && (matchPhone || matchName));
+                        });
+                        const customerInvoiceIds = new Set(customerInvoices.map(inv => inv.id));
+                        const customerReturns = returnSalesOrders.filter(ret => {
+                          const matchId = !!(ret.customerId && ret.customerId === selectedCustomer.id);
+                          const matchInvoice = !!(ret.invoiceId && customerInvoiceIds.has(ret.invoiceId));
+                          const matchName = !!(ret.customer && selectedCustomer.name && ret.customer.trim().toLowerCase() === selectedCustomer.name.trim().toLowerCase());
+                          return matchId || matchInvoice || matchName;
+                        });
+
+                        const allTx = [
+                          ...customerInvoices.map(inv => {
+                            const matchingReturn = returnSalesOrders?.find(r => r.invoiceId === inv.id || r.note?.includes(inv.id));
+                            const returnedValue = matchingReturn ? (matchingReturn.total || 0) : 0;
+                            const returnedPaid = matchingReturn ? (matchingReturn.paid || 0) : 0;
+                            const effectiveDebt = Math.max(0, (inv.debt || 0) - returnedValue + returnedPaid);
+                            return {
+                              id: inv.id,
+                              date: inv.date || inv.createdAt,
+                              type: 'sales',
+                              label: 'Bán hàng',
+                              total: inv.total,
+                              debt: effectiveDebt,
+                              hasReturn: !!matchingReturn,
+                              original: inv
+                            };
+                          }),
+                          ...customerReturns.map(ret => ({
+                            id: ret.id,
+                            date: ret.date,
+                            type: 'returns',
+                            label: 'Trả hàng',
+                            total: -ret.total,
+                            debt: 0,
+                            hasReturn: false,
+                            original: ret
+                          }))
+                        ].sort((a, b) => parseDateString(b.date) - parseDateString(a.date));
+
+                        const filteredTx = allTx.filter(t => txFilter === 'all' || t.type === txFilter);
+
+                        if (filteredTx.length === 0) {
                           return (
                             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-12 text-center text-slate-400 italic text-sm font-medium">
-                              Chưa có giao dịch mua hàng nào.
+                              Không có giao dịch nào phù hợp.
                             </div>
                           );
                         }
-                        return stats.invoices.map(invoice => {
-                          const hasReturn = returnSalesOrders?.some(r => r.invoiceId === invoice.id || r.note?.includes(invoice.id));
-                          const effectiveDebt = hasReturn ? 0 : invoice.debt;
-                          return (
-                            <div 
-                              key={invoice.id} 
-                              className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-pink-300 transition-all cursor-pointer"
-                              onClick={() => setSelectedInvoice(invoice)}
-                            >
-                              <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 shrink-0">
-                                    <FileText size={20} />
-                                  </div>
-                                  <div>
-                                    <p className="font-normal text-sm text-slate-800 tracking-tight">{invoice.id}</p>
-                                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-normal mt-0.5">
-                                      <Calendar size={12} />
-                                      {invoice.date}
+
+                        return filteredTx.map(tx => {
+                          if (tx.type === 'sales') {
+                            const invoice = tx.original as Invoice;
+                            return (
+                              <div 
+                                key={invoice.id} 
+                                className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-pink-300 transition-all cursor-pointer"
+                                onClick={() => setSelectedInvoice(invoice)}
+                              >
+                                <div className="flex items-center justify-between mb-3">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 shrink-0">
+                                      <FileText size={20} />
+                                    </div>
+                                    <div>
+                                      <p className="font-normal text-sm text-slate-800 tracking-tight">{invoice.id}</p>
+                                      <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-normal mt-0.5">
+                                        <Calendar size={12} />
+                                        {invoice.date}
+                                      </div>
                                     </div>
                                   </div>
+                                  <div className={`px-2.5 py-1 rounded-full text-[9px] font-normal uppercase tracking-widest ${tx.hasReturn ? 'bg-purple-50 text-purple-600' : invoice.debt === 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'}`}>
+                                    {tx.hasReturn ? 'HOÀN HÀNG' : invoice.debt === 0 ? 'HOÀN TẤT' : 'CÒN NỢ'}
+                                  </div>
                                 </div>
-                                <div className={`px-2.5 py-1 rounded-full text-[9px] font-normal uppercase tracking-widest ${hasReturn ? 'bg-purple-50 text-purple-600' : invoice.debt === 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'}`}>
-                                  {hasReturn ? 'HOÀN HÀNG' : invoice.debt === 0 ? 'HOÀN TẤT' : 'CÒN NỢ'}
+                                <div className="flex justify-between items-center border-t border-slate-50 pt-3">
+                                  <div>
+                                    <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest mb-0.5">Tổng tiền</p>
+                                    <p className="font-normal text-slate-900 text-[13px]">{formatNumber(invoice.total)}đ</p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest mb-0.5">Còn nợ</p>
+                                    <p className={`font-normal text-[13px] ${tx.debt > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                      {formatNumber(tx.debt)}đ
+                                    </p>
+                                  </div>
+                                  {tx.debt > 0 && (
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenPaymentModal('SINGLE', invoice.id, tx.debt);
+                                      }}
+                                      className="w-8 h-8 flex items-center justify-center bg-emerald-50 text-emerald-600 rounded-lg shrink-0 hover:bg-emerald-600 hover:text-white transition-colors"
+                                    >
+                                      <CreditCard size={14} />
+                                    </button>
+                                  )}
                                 </div>
                               </div>
-                              <div className="flex justify-between items-center border-t border-slate-50 pt-3">
-                                <div>
-                                  <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest mb-0.5">Tổng tiền</p>
-                                  <p className="font-normal text-slate-900 text-[13px]">{formatNumber(invoice.total)}đ</p>
+                            );
+                          } else {
+                            const ret = tx.original as any;
+                            return (
+                              <div 
+                                key={ret.id} 
+                                className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-purple-300 transition-all cursor-pointer"
+                              >
+                                <div className="flex items-center justify-between mb-3">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center shrink-0">
+                                      <History size={20} />
+                                    </div>
+                                    <div>
+                                      <p className="font-normal text-sm text-slate-800 tracking-tight">{ret.id}</p>
+                                      <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-normal mt-0.5">
+                                        <Calendar size={12} />
+                                        {ret.date}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="px-2.5 py-1 rounded-full text-[9px] font-normal uppercase tracking-widest bg-purple-50 text-purple-600">
+                                    TRẢ HÀNG
+                                  </div>
                                 </div>
-                                <div className="text-right">
-                                  <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest mb-0.5">Còn nợ</p>
-                                  <p className={`font-normal text-[13px] ${effectiveDebt > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                                    {formatNumber(effectiveDebt)}đ
-                                  </p>
+                                <div className="flex justify-between items-center border-t border-slate-50 pt-3">
+                                  <div>
+                                    <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest mb-0.5">Giá trị trả</p>
+                                    <p className="font-normal text-purple-700 text-[13px]">{formatNumber(ret.total)}đ</p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest mb-0.5">Đã hoàn tiền</p>
+                                    <p className="font-normal text-emerald-600 text-[13px]">{formatNumber(ret.paid || 0)}đ</p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest mb-0.5">Cửa hàng nợ</p>
+                                    <p className={`font-normal text-[13px] ${ret.total - (ret.paid || 0) > 0 ? 'text-red-600' : 'text-slate-600'}`}>
+                                      {formatNumber(Math.max(0, ret.total - (ret.paid || 0)))}đ
+                                    </p>
+                                  </div>
                                 </div>
-                                {effectiveDebt > 0 && (
-                                  <button 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleOpenPaymentModal('SINGLE', invoice.id, effectiveDebt);
-                                    }}
-                                    className="w-8 h-8 flex items-center justify-center bg-emerald-50 text-emerald-600 rounded-lg shrink-0 hover:bg-emerald-600 hover:text-white transition-colors"
-                                  >
-                                    <CreditCard size={14} />
-                                  </button>
-                                )}
                               </div>
-                            </div>
-                          );
+                            );
+                          }
                         });
                      })()}
                   </div>
@@ -1801,10 +1900,57 @@ return (
                 }
 
                 if (activeDetailTab === 'history') {
+                  const customerInvoices = invoices.filter(inv => {
+                    const matchId = !!(inv.customerId && inv.customerId === selectedCustomer.id);
+                    const matchPhone = !!(inv.phone && inv.phone !== '---' && selectedCustomer.phone && inv.phone.trim() === selectedCustomer.phone.trim());
+                    const matchName = !!(inv.customer && selectedCustomer.name && inv.customer.trim().toLowerCase() === selectedCustomer.name.trim().toLowerCase());
+                    return matchId || (!inv.customerId && (matchPhone || matchName));
+                  });
+                  const customerInvoiceIds = new Set(customerInvoices.map(inv => inv.id));
+                  const customerReturns = returnSalesOrders.filter(ret => {
+                    const matchId = !!(ret.customerId && ret.customerId === selectedCustomer.id);
+                    const matchInvoice = !!(ret.invoiceId && customerInvoiceIds.has(ret.invoiceId));
+                    const matchName = !!(ret.customer && selectedCustomer.name && ret.customer.trim().toLowerCase() === selectedCustomer.name.trim().toLowerCase());
+                    return matchId || matchInvoice || matchName;
+                  });
+
+                  const allTx = [
+                    ...customerInvoices.map(inv => {
+                      const matchingReturn = returnSalesOrders?.find(r => r.invoiceId === inv.id || r.note?.includes(inv.id));
+                      const returnedValue = matchingReturn ? (matchingReturn.total || 0) : 0;
+                      const returnedPaid = matchingReturn ? (matchingReturn.paid || 0) : 0;
+                      const effectiveDebt = Math.max(0, (inv.debt || 0) - returnedValue + returnedPaid);
+                      return {
+                        id: inv.id,
+                        date: inv.date || inv.createdAt,
+                        type: 'sales',
+                        typeName: 'Bán hàng',
+                        value: inv.total,
+                        debt: effectiveDebt,
+                        original: inv
+                      };
+                    }),
+                    ...customerReturns.map(ret => ({
+                      id: ret.id,
+                      date: ret.date,
+                      type: 'returns',
+                      typeName: 'Trả hàng',
+                      value: -ret.total,
+                      debt: 0,
+                      original: ret
+                    }))
+                  ].sort((a, b) => parseDateString(b.date) - parseDateString(a.date));
+
+                  const filteredTx = allTx.filter(t => txFilter === 'all' || t.type === txFilter);
+
                   return (
                     <div className="animate-in fade-in h-full flex flex-col bg-white">
                       <div className="py-3 px-5 flex justify-end bg-white shrink-0">
-                        <select className="border border-slate-300 rounded-[4px] text-[13px] px-3 py-1.5 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 focus:outline-none bg-white min-w-[200px] text-slate-700">
+                        <select 
+                          value={txFilter} 
+                          onChange={(e) => setTxFilter(e.target.value as any)}
+                          className="border border-slate-300 rounded-[4px] text-[13px] px-3 py-1.5 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 focus:outline-none bg-white min-w-[200px] text-slate-700"
+                        >
                           <option value="all">Tất cả giao dịch</option>
                           <option value="sales">Bán hàng</option>
                           <option value="returns">Trả hàng</option>
@@ -1823,20 +1969,28 @@ return (
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100/50">
-                            {stats.invoices.length === 0 ? (
+                            {filteredTx.length === 0 ? (
                               <tr>
                                 <td colSpan={5} className="py-8 text-center text-slate-500 text-[13px] italic bg-white">Không có dữ liệu</td>
                               </tr>
                             ) : (
-                              stats.invoices.map(inv => (
-                                <tr key={inv.id} className="hover:bg-slate-50/80 transition-colors group bg-white">
-                                  <td className="px-5 py-4 text-[#1890ff] cursor-pointer hover:underline text-[13px]" onClick={() => setSelectedInvoice(inv)}>
-                                    {inv.id}
+                              filteredTx.map(tx => (
+                                <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors group bg-white">
+                                  <td className="px-5 py-4 text-[#1890ff] cursor-pointer hover:underline text-[13px]" onClick={() => tx.type === 'sales' && setSelectedInvoice(tx.original)}>
+                                    {tx.id}
                                   </td>
-                                  <td className="px-5 py-4 text-[13px] text-slate-700">{formatDateTime(inv.createdAt)}</td>
-                                  <td className="px-5 py-4 text-[13px] text-slate-700">Bán hàng</td>
-                                  <td className="px-5 py-4 text-[13px] text-right text-slate-700">{formatNumber(inv.total - (inv.discount || 0))}</td>
-                                  <td className="px-5 py-4 text-[13px] text-right text-slate-700">{formatNumber(inv.debt)}</td>
+                                  <td className="px-5 py-4 text-[13px] text-slate-700">{formatDateTime(tx.date)}</td>
+                                  <td className="px-5 py-4 text-[13px] text-slate-700">
+                                    <span className={tx.type === 'returns' ? 'text-purple-600 font-medium' : 'text-slate-700'}>
+                                      {tx.typeName}
+                                    </span>
+                                  </td>
+                                  <td className={`px-5 py-4 text-[13px] text-right font-medium ${tx.type === 'returns' ? 'text-purple-600' : 'text-slate-700'}`}>
+                                    {tx.type === 'returns' ? '-' : ''}{formatNumber(Math.abs(tx.value))}đ
+                                  </td>
+                                  <td className={`px-5 py-4 text-[13px] text-right ${tx.debt > 0 ? 'text-red-500 font-medium' : 'text-slate-700'}`}>
+                                    {tx.type === 'returns' ? '---' : `${formatNumber(tx.debt)}đ`}
+                                  </td>
                                 </tr>
                               ))
                             )}
