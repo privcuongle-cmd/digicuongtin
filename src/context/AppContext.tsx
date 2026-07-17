@@ -12,6 +12,7 @@ interface AppContextProps extends AppState {
   updateProduct: (id: string, updates: Partial<Product>, skipStockCard?: boolean) => void;
   addCustomer: (customer: Customer) => Customer;
   updateCustomer: (id: string, updates: Partial<Customer>) => void;
+  deleteCustomer: (id: string) => Promise<void>;
   addSupplier: (supplier: Supplier) => void;
   addInvoice: (invoice: Invoice, isExplicitEdit?: boolean) => Promise<Invoice>;
   updateInvoice: (id: string, updates: Partial<Invoice>) => void;
@@ -521,7 +522,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               createdAt: String(c.createdAt || ''),
               totalSpent: parseFormattedNumber(c.totalSpent),
               debt: parseFormattedNumber(c.debt),
-              image: String(c.image || '')
+              image: String(c.image || ''),
+              status: c.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE'
             })) : [],
             suppliers: validApiSuppliers.length > 0 ? validApiSuppliers.map((s: any) => ({
               id: String(s.id || ''),
@@ -972,7 +974,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       phone2: paddedPhone2,
       id: customer.id || generateId('KH', state.customers || []),
       createdAt: customer.createdAt || formatDateTime(new Date()),
-      createdBy: customer.createdBy || state.currentUser?.name || 'Admin'
+      createdBy: customer.createdBy || state.currentUser?.name || 'Admin',
+      status: customer.status || 'ACTIVE'
     };
     setState(prev => ({ ...prev, customers: [...(prev.customers || []), newCustomer] }));
     
@@ -989,7 +992,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       createdBy: newCustomer.createdBy,
       createdAt: newCustomer.createdAt,
       totalSpent: 0,
-      debt: 0
+      debt: 0,
+      status: newCustomer.status
     });
 
     return newCustomer;
@@ -1013,6 +1017,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       customers: (prev.customers || []).map(c => c.id === id ? { ...c, ...updates } : c)
     }));
     await apiService.updateRecord('Customers', id, apiUpdates);
+  };
+
+  const deleteCustomer = async (id: string) => {
+    setState(prev => ({
+      ...prev,
+      customers: (prev.customers || []).filter(c => c.id !== id)
+    }));
+    await apiService.deleteRecord('Customers', id);
   };
 
   const addSupplier = async (supplier: Supplier) => {
@@ -2414,6 +2426,7 @@ ${updates.purchaseId ? `<b>Đơn hàng liên kết:</b> ${updates.purchaseId}\n`
       updateProduct,
       addCustomer, 
       updateCustomer,
+      deleteCustomer,
       addSupplier,
       addInvoice, 
       updateInvoice,

@@ -32,6 +32,7 @@ export interface Customer {
   totalSpent?: number;
   debt?: number;
   image?: string;
+  status?: 'ACTIVE' | 'INACTIVE';
 }
 
 export interface Supplier {

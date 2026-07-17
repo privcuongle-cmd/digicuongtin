@@ -16,7 +16,7 @@ import { useMobileBackModal } from '../hooks/useMobileBackModal';
 
 export const Customers: React.FC = () => {
   const { 
-    customers, addCustomer, updateCustomer, invoices, updateInvoice, 
+    customers, addCustomer, updateCustomer, deleteCustomer, invoices, updateInvoice, 
     addCashTransaction, returnSalesOrders, currentUser, cashTransactions, 
     maintenanceRecords, tasks, wifiRecords, cameraAccounts, cameraInstallations, wallets, images,
     uploadImage, addWifiRecord, addCameraAccount, addCameraInstallation, addMaintenanceRecord, addTask 
@@ -66,6 +66,8 @@ export const Customers: React.FC = () => {
     }
   };
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+  const [showMobileActions, setShowMobileActions] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -173,13 +175,19 @@ export const Customers: React.FC = () => {
   useEscapeKey(() => setAddModalType(null), !!addModalType);
 
   const filteredCustomers = (customers || [])
-    .filter(c => 
-      (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
-      (c.phone || '').includes(searchTerm) ||
-      (c.phone2 || '').includes(searchTerm) ||
-      (c.address || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (c.location || '').toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    .filter(c => {
+      const customerStatus = c.status || 'ACTIVE';
+      if (statusFilter !== 'ALL' && customerStatus !== statusFilter) {
+        return false;
+      }
+      return (
+        (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+        (c.phone || '').includes(searchTerm) ||
+        (c.phone2 || '').includes(searchTerm) ||
+        (c.address || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (c.location || '').toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    })
     .sort((a, b) => String(b.id || '').localeCompare(String(a.id || '')));
 
   const totalItems = filteredCustomers.length;
@@ -197,20 +205,55 @@ export const Customers: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  const handleToggleCustomerStatus = async (customer: Customer) => {
+    const isCurrentlyInactive = customer.status === 'INACTIVE';
+    const newStatus = isCurrentlyInactive ? 'ACTIVE' : 'INACTIVE';
+    
+    const confirmMessage = isCurrentlyInactive
+      ? `Bạn có chắc chắn muốn kích hoạt lại khách hàng ${customer.name}?`
+      : `Bạn có chắc chắn muốn ngừng hoạt động khách hàng ${customer.name}? Dữ liệu giao dịch của khách hàng vẫn được giữ nguyên.`;
+      
+    if (confirm(confirmMessage)) {
+      try {
+        await updateCustomer(customer.id!, { status: newStatus });
+        setSelectedCustomer(prev => prev ? { ...prev, status: newStatus } : null);
+      } catch (error) {
+        alert('Có lỗi xảy ra khi cập nhật trạng thái khách hàng');
+      }
+    }
+  };
+
+  const handleDeleteCustomer = async (customer: Customer) => {
+    const confirmMessage = `Bạn có chắc chắn muốn XÓA VĨNH VIỄN khách hàng ${customer.name}? Hành động này không thể hoàn tác!`;
+    if (confirm(confirmMessage)) {
+      try {
+        await deleteCustomer(customer.id!);
+        setSelectedCustomer(null);
+        alert('Đã xóa khách hàng thành công');
+      } catch (error) {
+        alert('Có lỗi xảy ra khi xóa khách hàng');
+      }
+    }
+  };
+
   const getCustomerStats = (customer: Customer) => {
     const customerInvoices = invoices.filter(inv => {
-      const matchId = !!(inv.customerId && inv.customerId === customer.id);
+      const matchId = !!(inv.customerId && customer.id && inv.customerId.trim().toLowerCase() === customer.id.trim().toLowerCase());
       const matchPhone = !!(inv.phone && inv.phone !== '---' && customer.phone && inv.phone.trim() === customer.phone.trim());
       const matchName = !!(inv.customer && customer.name && inv.customer.trim().toLowerCase() === customer.name.trim().toLowerCase());
       return matchId || (!inv.customerId && (matchPhone || matchName));
     });
     
-    const customerInvoiceIds = new Set(customerInvoices.map(inv => inv.id));
+    const customerInvoiceIds = new Set(customerInvoices.map(inv => inv.id.trim().toLowerCase()));
 
     const customerReturns = returnSalesOrders.filter(ret => {
-      const matchId = !!(ret.customerId && ret.customerId === customer.id);
-      const matchInvoice = !!(ret.invoiceId && customerInvoiceIds.has(ret.invoiceId));
-      const matchName = !!(ret.customer && customer.name && ret.customer.trim().toLowerCase() === customer.name.trim().toLowerCase());
+      const matchId = !!(ret.customerId && customer.id && ret.customerId.trim().toLowerCase() === customer.id.trim().toLowerCase());
+      const matchInvoice = !!(ret.invoiceId && customerInvoiceIds.has(ret.invoiceId.trim().toLowerCase()));
+      
+      const cleanRetCustomer = (ret.customer || '').trim().toLowerCase();
+      const cleanCustName = (customer.name || '').trim().toLowerCase();
+      const matchName = !!(cleanRetCustomer && cleanCustName && (cleanRetCustomer === cleanCustName || cleanRetCustomer.includes(cleanCustName) || cleanCustName.includes(cleanRetCustomer)));
+      
       return matchId || matchInvoice || matchName;
     });
 
@@ -410,10 +453,19 @@ return (
           )}
         </div>
         
-        <div className="hidden md:flex items-center gap-2 overflow-x-auto pb-1 md:pb-0 scrollbar-hide">
+        <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0 justify-between md:justify-end">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+            className="border border-slate-200 rounded-lg text-xs px-3 py-2 bg-white text-slate-700 font-medium focus:ring-1 focus:ring-blue-500 focus:outline-none h-[38px] cursor-pointer"
+          >
+            <option value="ALL">Tất cả trạng thái</option>
+            <option value="ACTIVE">Đang hoạt động</option>
+            <option value="INACTIVE">Ngừng hoạt động</option>
+          </select>
           <button 
             onClick={() => { resetForm(); setIsModalOpen(true); }}
-            className="px-4 py-2 bg-blue-600 text-white rounded-xl font-bold text-sm items-center gap-2 hover:bg-blue-700 transition-all shadow-md shadow-blue-100 flex"
+            className="hidden md:flex px-4 py-2 bg-blue-600 text-white rounded-xl font-bold text-sm items-center gap-2 hover:bg-blue-700 transition-all shadow-md shadow-blue-100 h-[38px] whitespace-nowrap"
           >
             <Plus size={16} /> Khách hàng
           </button>
@@ -461,7 +513,14 @@ return (
                       </td>
                       <td className="p-3 font-medium text-blue-600">{c.id}</td>
                       <td className="p-3">
-                        <span className="font-bold text-base text-slate-800">{c.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-base text-slate-800">{c.name}</span>
+                          {c.status === 'INACTIVE' && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-600 border border-red-200">
+                              Ngừng hoạt động
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="p-3">
                         <p className="font-medium text-[15px] text-slate-700">{c.phone}</p>
@@ -495,7 +554,14 @@ return (
                         {c.image ? <img src={c.image} alt={c.name} className="w-full h-full object-cover" /> : c.name.charAt(0)}
                       </div>
                       <div className="flex-1 min-w-0 pr-3">
-                          <h4 className="font-bold text-base text-slate-800 break-words leading-tight">{c.name}</h4>
+                          <h4 className="font-bold text-base text-slate-800 break-words leading-tight flex flex-wrap items-center gap-1.5">
+                            {c.name}
+                            {c.status === 'INACTIVE' && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 text-red-600 border border-red-200">
+                                Ngừng hoạt động
+                              </span>
+                            )}
+                          </h4>
                           {c.phone && (
                             <div className="flex items-center gap-1.5 mt-1">
                               <span className="text-[12px] text-blue-600 font-bold tracking-wide flex items-center gap-1">
@@ -602,11 +668,15 @@ return (
                           const matchName = !!(inv.customer && selectedCustomer.name && inv.customer.trim().toLowerCase() === selectedCustomer.name.trim().toLowerCase());
                           return matchId || (!inv.customerId && (matchPhone || matchName));
                         });
-                        const customerInvoiceIds = new Set(customerInvoices.map(inv => inv.id));
+                        const customerInvoiceIds = new Set(customerInvoices.map(inv => inv.id.trim().toLowerCase()));
                         const customerReturns = returnSalesOrders.filter(ret => {
-                          const matchId = !!(ret.customerId && ret.customerId === selectedCustomer.id);
-                          const matchInvoice = !!(ret.invoiceId && customerInvoiceIds.has(ret.invoiceId));
-                          const matchName = !!(ret.customer && selectedCustomer.name && ret.customer.trim().toLowerCase() === selectedCustomer.name.trim().toLowerCase());
+                          const matchId = !!(ret.customerId && selectedCustomer.id && ret.customerId.trim().toLowerCase() === selectedCustomer.id.trim().toLowerCase());
+                          const matchInvoice = !!(ret.invoiceId && customerInvoiceIds.has(ret.invoiceId.trim().toLowerCase()));
+                          
+                          const cleanRetCustomer = (ret.customer || '').trim().toLowerCase();
+                          const cleanCustName = (selectedCustomer.name || '').trim().toLowerCase();
+                          const matchName = !!(cleanRetCustomer && cleanCustName && (cleanRetCustomer === cleanCustName || cleanRetCustomer.includes(cleanCustName) || cleanCustName.includes(cleanRetCustomer)));
+                          
                           return matchId || matchInvoice || matchName;
                         });
 
@@ -843,7 +913,7 @@ return (
                       <ChevronLeft size={24} />
                       <span className="text-lg font-normal">Chi tiết khách hàng</span>
                     </button>
-                    <button className="text-slate-500">
+                    <button onClick={() => setShowMobileActions(true)} className="text-slate-500 p-1 hover:bg-slate-100 rounded-full transition-colors">
                       <MoreHorizontal size={24} />
                     </button>
                   </div>
@@ -1877,9 +1947,10 @@ return (
                       {/* Footer Buttons */}
                       <div className="border-t border-slate-200 pt-4 flex justify-between items-center mt-4 min-h-[50px] shrink-0">
                         <button 
-                          className="flex items-center gap-1.5 text-[14px] font-medium text-slate-700 hover:text-red-500 px-3 py-1.5 rounded transition-colors"
+                          onClick={() => handleDeleteCustomer(selectedCustomer)}
+                          className="flex items-center gap-1.5 text-[14px] font-medium text-slate-500 hover:text-red-600 px-3 py-1.5 rounded transition-colors"
                         >
-                          <Trash2 size={16} /> Xóa
+                          <Trash2 size={16} /> Xóa khách hàng
                         </button>
                         <div className="flex items-center gap-3">
                           <button 
@@ -1889,9 +1960,15 @@ return (
                             <Edit3 size={15} /> Chỉnh sửa
                           </button>
                           <button 
-                            className="flex items-center gap-2 text-[14px] font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 px-5 py-1.5 rounded-[4px] transition-colors shadow-sm"
+                            onClick={() => handleToggleCustomerStatus(selectedCustomer)}
+                            className={`flex items-center gap-2 text-[14px] font-medium px-5 py-1.5 rounded-[4px] transition-colors shadow-sm border ${
+                              selectedCustomer.status === 'INACTIVE' 
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100' 
+                                : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                            }`}
                           >
-                            <Lock size={15} className="text-slate-500" /> Ngừng hoạt động
+                            <Lock size={15} className={selectedCustomer.status === 'INACTIVE' ? 'text-emerald-600' : 'text-slate-500'} /> 
+                            {selectedCustomer.status === 'INACTIVE' ? 'Kích hoạt lại' : 'Ngừng hoạt động'}
                           </button>
                         </div>
                       </div>
@@ -1906,11 +1983,15 @@ return (
                     const matchName = !!(inv.customer && selectedCustomer.name && inv.customer.trim().toLowerCase() === selectedCustomer.name.trim().toLowerCase());
                     return matchId || (!inv.customerId && (matchPhone || matchName));
                   });
-                  const customerInvoiceIds = new Set(customerInvoices.map(inv => inv.id));
+                  const customerInvoiceIds = new Set(customerInvoices.map(inv => inv.id.trim().toLowerCase()));
                   const customerReturns = returnSalesOrders.filter(ret => {
-                    const matchId = !!(ret.customerId && ret.customerId === selectedCustomer.id);
-                    const matchInvoice = !!(ret.invoiceId && customerInvoiceIds.has(ret.invoiceId));
-                    const matchName = !!(ret.customer && selectedCustomer.name && ret.customer.trim().toLowerCase() === selectedCustomer.name.trim().toLowerCase());
+                    const matchId = !!(ret.customerId && selectedCustomer.id && ret.customerId.trim().toLowerCase() === selectedCustomer.id.trim().toLowerCase());
+                    const matchInvoice = !!(ret.invoiceId && customerInvoiceIds.has(ret.invoiceId.trim().toLowerCase()));
+                    
+                    const cleanRetCustomer = (ret.customer || '').trim().toLowerCase();
+                    const cleanCustName = (selectedCustomer.name || '').trim().toLowerCase();
+                    const matchName = !!(cleanRetCustomer && cleanCustName && (cleanRetCustomer === cleanCustName || cleanRetCustomer.includes(cleanCustName) || cleanCustName.includes(cleanRetCustomer)));
+                    
                     return matchId || matchInvoice || matchName;
                   });
 
@@ -2654,6 +2735,65 @@ return (
         customer={selectedCustomer} 
         onClose={() => setAddModalType(null)} 
       />
+
+      {/* Mobile Action Sheet */}
+      {showMobileActions && selectedCustomer && (
+        <div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-900/60 backdrop-blur-sm md:hidden animate-fade-in">
+          <div className="fixed inset-0" onClick={() => setShowMobileActions(false)} />
+          <div className="bg-white w-full rounded-t-2xl shadow-2xl overflow-hidden flex flex-col z-10 transition-transform transform translate-y-0 duration-300">
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h4 className="text-sm font-bold text-slate-500 uppercase">Thao tác khách hàng</h4>
+              <button 
+                onClick={() => setShowMobileActions(false)} 
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-200 text-slate-600"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-3 space-y-2">
+              <button
+                onClick={() => {
+                  setShowMobileActions(false);
+                  handleEdit(selectedCustomer);
+                }}
+                className="w-full py-3 px-4 flex items-center gap-3 text-slate-700 hover:bg-slate-50 rounded-xl font-medium text-[15px] text-left"
+              >
+                <Edit3 size={18} className="text-blue-500" />
+                <span>Chỉnh sửa thông tin</span>
+              </button>
+              <button
+                onClick={() => {
+                  setShowMobileActions(false);
+                  handleToggleCustomerStatus(selectedCustomer);
+                }}
+                className="w-full py-3 px-4 flex items-center gap-3 text-slate-700 hover:bg-slate-50 rounded-xl font-medium text-[15px] text-left"
+              >
+                <Lock size={18} className="text-orange-500" />
+                <span>{selectedCustomer.status === 'INACTIVE' ? 'Kích hoạt lại' : 'Ngừng hoạt động'}</span>
+              </button>
+              <div className="border-t border-slate-100 my-1" />
+              <button
+                onClick={() => {
+                  setShowMobileActions(false);
+                  handleDeleteCustomer(selectedCustomer);
+                }}
+                className="w-full py-3 px-4 flex items-center gap-3 text-red-600 hover:bg-red-50 rounded-xl font-medium text-[15px] text-left"
+              >
+                <Trash2 size={18} className="text-red-500" />
+                <span>Xóa vĩnh viễn khách hàng</span>
+              </button>
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100">
+              <button
+                onClick={() => setShowMobileActions(false)}
+                className="w-full py-2.5 bg-slate-200 text-slate-700 font-bold rounded-lg text-sm"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
     </div>
   );
