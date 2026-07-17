@@ -221,3 +221,31 @@ export const handlePhoneCall = (e: React.MouseEvent, phone?: string) => {
 export function cn(...inputs: any[]) {
   return inputs.filter(Boolean).join(' ');
 }
+
+export function getCustomerDebt(
+  customerInvoices: any[],
+  customerReturns: any[],
+  allReturns: any[]
+): number {
+  let totalDebt = 0;
+  const processedReturnIds = new Set<string>();
+
+  customerInvoices.forEach(inv => {
+    const matchingReturn = allReturns?.find((r: any) => r.invoiceId === inv.id || r.note?.includes(inv.id));
+    if (matchingReturn) {
+      totalDebt += (matchingReturn.paid || 0) - (inv.paid || 0);
+      processedReturnIds.add(matchingReturn.id);
+    } else {
+      totalDebt += (inv.debt || 0);
+    }
+  });
+
+  customerReturns.forEach(ret => {
+    if (!processedReturnIds.has(ret.id)) {
+      totalDebt -= ((ret.total || 0) - (ret.paid || 0));
+    }
+  });
+
+  return totalDebt;
+}
+

@@ -199,6 +199,7 @@ export interface ReturnSalesOrder {
   date: string;
   customerId?: string;
   customer: string;
+  invoiceId?: string;
   items: InvoiceItem[];
   totalGoods: number;
   discount: number;

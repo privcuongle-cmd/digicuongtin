@@ -3,7 +3,7 @@ import { Search, UserPlus, User, X, FileText, Calendar, Wallet, ChevronRight, Cr
 import { useAppContext } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import { Customer, Invoice, CashTransaction, MaintenanceRecord, Task, WifiRecord, CameraAccountRecord, CameraInstallation } from '../types';
-import { formatNumber, parseFormattedNumber, formatDateTime, parseDateString, handlePhoneCall, formatDate, smartParseDate } from '../lib/utils';
+import { formatNumber, parseFormattedNumber, formatDateTime, parseDateString, handlePhoneCall, formatDate, smartParseDate, getCustomerDebt } from '../lib/utils';
 import { generateId } from '../lib/idUtils';
 import { PrintTemplate } from '../components/PrintTemplate';
 import { ImageLibraryModal } from '../components/ImageLibraryModal';
@@ -197,22 +197,25 @@ export const Customers: React.FC = () => {
   };
 
   const getCustomerStats = (customer: Customer) => {
-    const customerInvoices = invoices.filter(inv => 
-      (inv.customerId && inv.customerId === customer.id) || 
-      (!inv.customerId && (
-        (inv.phone && inv.phone !== '---' && inv.phone === customer.phone) || 
-        (inv.customer === customer.name)
-      ))
-    );
+    const customerInvoices = invoices.filter(inv => {
+      const matchId = !!(inv.customerId && inv.customerId === customer.id);
+      const matchPhone = !!(inv.phone && inv.phone !== '---' && customer.phone && inv.phone.trim() === customer.phone.trim());
+      const matchName = !!(inv.customer && customer.name && inv.customer.trim().toLowerCase() === customer.name.trim().toLowerCase());
+      return matchId || (!inv.customerId && (matchPhone || matchName));
+    });
     
-    const customerReturns = returnSalesOrders.filter(ret => 
-      (ret.customerId && ret.customerId === customer.id) ||
-      (!ret.customerId && ret.customer === customer.name)
-    );
+    const customerInvoiceIds = new Set(customerInvoices.map(inv => inv.id));
 
-    const totalSpent = customerInvoices.reduce((sum, inv) => sum + inv.total, 0);
+    const customerReturns = returnSalesOrders.filter(ret => {
+      const matchId = !!(ret.customerId && ret.customerId === customer.id);
+      const matchInvoice = !!(ret.invoiceId && customerInvoiceIds.has(ret.invoiceId));
+      const matchName = !!(ret.customer && customer.name && ret.customer.trim().toLowerCase() === customer.name.trim().toLowerCase());
+      return matchId || matchInvoice || matchName;
+    });
+
     const totalReturned = customerReturns.reduce((sum, ret) => sum + ret.total, 0);
-    const totalDebt = customerInvoices.reduce((sum, inv) => sum + (inv.debt || 0), 0);
+    const totalSpent = Math.max(0, customerInvoices.reduce((sum, inv) => sum + inv.total, 0) - totalReturned);
+    const totalDebt = getCustomerDebt(customerInvoices, customerReturns, returnSalesOrders);
     const totalPaid = customerInvoices.reduce((sum, inv) => sum + (inv.paid || 0), 0);
     const avgPerOrder = customerInvoices.length > 0 ? totalSpent / customerInvoices.length : 0;
     const paymentRate = totalSpent > 0 ? (totalPaid / totalSpent) * 100 : 0;
@@ -238,7 +241,7 @@ export const Customers: React.FC = () => {
     return {
       count: customerInvoices.length,
       total: totalSpent,
-      netTotal: totalSpent - totalReturned,
+      netTotal: totalSpent,
       debt: totalDebt,
       avgPerOrder,
       paymentRate,
@@ -590,54 +593,58 @@ return (
                             </div>
                           );
                         }
-                        return stats.invoices.map(invoice => (
-                          <div 
-                            key={invoice.id} 
-                            className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-pink-300 transition-all cursor-pointer"
-                            onClick={() => setSelectedInvoice(invoice)}
-                          >
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 shrink-0">
-                                  <FileText size={20} />
-                                </div>
-                                <div>
-                                  <p className="font-normal text-sm text-slate-800 tracking-tight">{invoice.id}</p>
-                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-normal mt-0.5">
-                                    <Calendar size={12} />
-                                    {invoice.date}
+                        return stats.invoices.map(invoice => {
+                          const hasReturn = returnSalesOrders?.some(r => r.invoiceId === invoice.id || r.note?.includes(invoice.id));
+                          const effectiveDebt = hasReturn ? 0 : invoice.debt;
+                          return (
+                            <div 
+                              key={invoice.id} 
+                              className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-pink-300 transition-all cursor-pointer"
+                              onClick={() => setSelectedInvoice(invoice)}
+                            >
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 shrink-0">
+                                    <FileText size={20} />
+                                  </div>
+                                  <div>
+                                    <p className="font-normal text-sm text-slate-800 tracking-tight">{invoice.id}</p>
+                                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-normal mt-0.5">
+                                      <Calendar size={12} />
+                                      {invoice.date}
+                                    </div>
                                   </div>
                                 </div>
+                                <div className={`px-2.5 py-1 rounded-full text-[9px] font-normal uppercase tracking-widest ${hasReturn ? 'bg-purple-50 text-purple-600' : invoice.debt === 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'}`}>
+                                  {hasReturn ? 'HOÀN HÀNG' : invoice.debt === 0 ? 'HOÀN TẤT' : 'CÒN NỢ'}
+                                </div>
                               </div>
-                              <div className={`px-2.5 py-1 rounded-full text-[9px] font-normal uppercase tracking-widest ${invoice.debt === 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'}`}>
-                                {invoice.debt === 0 ? 'HOÀN TẤT' : 'CÒN NỢ'}
+                              <div className="flex justify-between items-center border-t border-slate-50 pt-3">
+                                <div>
+                                  <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest mb-0.5">Tổng tiền</p>
+                                  <p className="font-normal text-slate-900 text-[13px]">{formatNumber(invoice.total)}đ</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest mb-0.5">Còn nợ</p>
+                                  <p className={`font-normal text-[13px] ${effectiveDebt > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                    {formatNumber(effectiveDebt)}đ
+                                  </p>
+                                </div>
+                                {effectiveDebt > 0 && (
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenPaymentModal('SINGLE', invoice.id, effectiveDebt);
+                                    }}
+                                    className="w-8 h-8 flex items-center justify-center bg-emerald-50 text-emerald-600 rounded-lg shrink-0 hover:bg-emerald-600 hover:text-white transition-colors"
+                                  >
+                                    <CreditCard size={14} />
+                                  </button>
+                                )}
                               </div>
                             </div>
-                            <div className="flex justify-between items-center border-t border-slate-50 pt-3">
-                              <div>
-                                <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest mb-0.5">Tổng tiền</p>
-                                <p className="font-normal text-slate-900 text-[13px]">{formatNumber(invoice.total)}đ</p>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest mb-0.5">Còn nợ</p>
-                                <p className={`font-normal text-[13px] ${invoice.debt > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                                  {formatNumber(invoice.debt)}đ
-                                </p>
-                              </div>
-                              {invoice.debt > 0 && (
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenPaymentModal('SINGLE', invoice.id, invoice.debt);
-                                  }}
-                                  className="w-8 h-8 flex items-center justify-center bg-emerald-50 text-emerald-600 rounded-lg shrink-0 hover:bg-emerald-600 hover:text-white transition-colors"
-                                >
-                                  <CreditCard size={14} />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ));
+                          );
+                        });
                      })()}
                   </div>
                 </>

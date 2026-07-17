@@ -110,7 +110,9 @@ export const CreateReturnSales: React.FC = () => {
     const order: ReturnSalesOrder = {
       id: returnId,
       date: dateStr,
+      customerId: selectedCustomer?.id,
       customer: selectedCustomer.name,
+      invoiceId: selectedInvoice?.id,
       items: selectedItems.map(item => ({
         id: item.id,
         name: item.name,

@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Search, Plus, Wrench, Clock, CheckCircle, ArrowLeftRight, X, User, Phone, Tag, AlertCircle, ShoppingBag, Globe, ChevronLeft, ChevronRight, FileText, Calendar, CreditCard, Package, Printer, RotateCcw, Wallet, Edit3, History } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { MaintenanceRecord, Invoice } from '../types';
-import { formatNumber, parseFormattedNumber, parseDateString, smartParseDate } from '../lib/utils';
+import { formatNumber, parseFormattedNumber, parseDateString, smartParseDate, getCustomerDebt } from '../lib/utils';
 import { NumericFormat } from 'react-number-format';
 import { generateId } from '../lib/idUtils';
 import { apiService } from '../services/api';
@@ -2398,7 +2398,16 @@ return (
         const displayPhone = selectedInvoiceForDetail.phone || matchingCustomer?.phone;
         const displayAddress = matchingCustomer?.address;
         const dateOfThisInvoice = smartParseDate(selectedInvoiceForDetail.date);
-        const customerInvoices = invoices.filter(i => 
+        
+        const processedInvoices = (invoices || []).map(inv => {
+          const isReturned = returnSalesOrders?.some(r => r.invoiceId === inv.id || r.note?.includes(inv.id));
+          if (isReturned) {
+            return { ...inv, debt: 0 };
+          }
+          return inv;
+        });
+
+        const customerInvoices = processedInvoices.filter(i => 
           i.customer === selectedInvoiceForDetail.customer && 
           (smartParseDate(i.date) < dateOfThisInvoice || (i.date === selectedInvoiceForDetail.date && i.id < selectedInvoiceForDetail.id))
         );
@@ -2406,8 +2415,7 @@ return (
           r.customer === selectedInvoiceForDetail.customer && 
           smartParseDate(r.date) < dateOfThisInvoice
         );
-        const calculatedOldDebt = customerInvoices.reduce((sum, i) => sum + i.debt, 0) - 
-                        customerReturns.reduce((sum, r) => sum + (r.total - r.paid), 0);
+        const calculatedOldDebt = getCustomerDebt(customerInvoices, customerReturns, returnSalesOrders || []);
         const oldDebt = selectedInvoiceForDetail.oldDebt !== undefined ? selectedInvoiceForDetail.oldDebt : calculatedOldDebt;
 
         return (

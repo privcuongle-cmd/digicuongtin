@@ -3,7 +3,7 @@ import { Search, Plus, FileDown, Star, X, Calendar, User, CreditCard, Package, F
 import { useAppContext } from '../context/AppContext';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Invoice } from '../types';
-import { formatNumber, formatDateTime, parseDateString } from '../lib/utils';
+import { formatNumber, formatDateTime, parseDateString, getCustomerDebt } from '../lib/utils';
 import { PrintTemplate } from '../components/PrintTemplate';
 import { useScrollLock } from '../hooks/useScrollLock';
 import { useEscapeKey } from '../hooks/useEscapeKey';
@@ -111,6 +111,17 @@ const filterNames: Record<string, string> = {
 
 export const Invoices: React.FC = () => {
   const { invoices, customers, addCashTransaction, updateInvoice, returnSalesOrders, products, wallets } = useAppContext();
+  
+  const processedInvoices = useMemo(() => {
+    return (invoices || []).map(inv => {
+      const isReturned = returnSalesOrders?.some(r => r.invoiceId === inv.id || r.note?.includes(inv.id));
+      if (isReturned) {
+        return { ...inv, debt: 0 };
+      }
+      return inv;
+    });
+  }, [invoices, returnSalesOrders]);
+
   const navigate = useNavigate();
   const location = useLocation();
   const [searchTerm, setSearchTerm] = useState('');
@@ -140,13 +151,13 @@ export const Invoices: React.FC = () => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const invoiceId = params.get('id') || params.get('invoiceId');
-    if (invoiceId && invoices && invoices.length > 0) {
-      const inv = invoices.find(i => i.id === invoiceId);
+    if (invoiceId && processedInvoices && processedInvoices.length > 0) {
+      const inv = processedInvoices.find(i => i.id === invoiceId);
       if (inv) {
         setSelectedInvoice(inv);
       }
     }
-  }, [location.search, invoices]);
+  }, [location.search, processedInvoices]);
 
   const handlePayment = async () => {
     if (!selectedInvoice || isProcessingPayment) return;
@@ -215,7 +226,7 @@ export const Invoices: React.FC = () => {
     const dateOfThisInvoice = parseDateString(inv.date);
     
     // Calculate total debt of this customer from ALL invoices BEFORE this one
-    const customerInvoices = invoices.filter(i => 
+    const customerInvoices = processedInvoices.filter(i => 
       i.customer === inv.customer && 
       (parseDateString(i.date) < dateOfThisInvoice || (i.date === inv.date && i.id < inv.id))
     );
@@ -226,8 +237,7 @@ export const Invoices: React.FC = () => {
       parseDateString(r.date) < dateOfThisInvoice
     );
 
-    const calculatedOldDebt = customerInvoices.reduce((sum, i) => sum + i.debt, 0) - 
-                    customerReturns.reduce((sum, r) => sum + (r.total - r.paid), 0);
+    const calculatedOldDebt = getCustomerDebt(customerInvoices, customerReturns, returnSalesOrders || []);
     
     const oldDebt = inv.oldDebt !== undefined ? inv.oldDebt : calculatedOldDebt;
 
@@ -259,7 +269,7 @@ export const Invoices: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(20);
 
-  const filteredInvoices = (invoices || []).filter(inv => {
+  const filteredInvoices = (processedInvoices || []).filter(inv => {
     const matchesSearch = (inv.id || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
       (inv.customer || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (inv.phone || '').includes(searchTerm);
@@ -321,7 +331,7 @@ return (
               <span className={showDebtOnly ? 'inline' : 'hidden sm:inline'}>Đơn nợ</span>
               {showDebtOnly && (
                 <span className="bg-white text-orange-600 px-1.5 py-0.5 rounded-full text-[10px]">
-                  {invoices.filter(i => i.debt > 0).length}
+                  {processedInvoices.filter(i => i.debt > 0).length}
                 </span>
               )}
             </button>
@@ -678,6 +688,8 @@ return (
                     <td className="p-3 text-center">
                       {inv.total < 0 ? (
                         <span className="bg-red-100 text-red-700 text-[10px] px-2 py-0.5 rounded font-bold">Trả hàng</span>
+                      ) : returnSalesOrders?.some(r => r.invoiceId === inv.id || r.note?.includes(inv.id)) ? (
+                        <span className="bg-purple-100 text-purple-700 text-[10px] px-2 py-0.5 rounded font-bold">Hoàn hàng</span>
                       ) : inv.debt > 0 ? (
                         <span className="bg-orange-100 text-orange-700 text-[10px] px-2 py-0.5 rounded font-bold">Còn nợ</span>
                       ) : (
@@ -735,6 +747,8 @@ return (
                       <div>
                         {inv.total < 0 ? (
                           <span className="text-red-500 font-bold text-sm sm:text-base">Trả hàng</span>
+                        ) : returnSalesOrders?.some(r => r.invoiceId === inv.id || r.note?.includes(inv.id)) ? (
+                          <span className="text-purple-500 font-bold text-sm sm:text-base">Hoàn hàng</span>
                         ) : inv.debt > 0 ? (
                           <span className="text-orange-500 font-bold text-sm sm:text-base">Còn nợ</span>
                         ) : (
@@ -819,7 +833,7 @@ return (
         const displayAddress = matchingCustomer?.address;
         
         const dateOfThisInvoice = parseDateString(selectedInvoice.date);
-        const customerInvoices = invoices.filter(i => 
+        const customerInvoices = processedInvoices.filter(i => 
           i.customer === selectedInvoice.customer && 
           (parseDateString(i.date) < dateOfThisInvoice || (i.date === selectedInvoice.date && i.id < selectedInvoice.id))
         );
@@ -827,8 +841,7 @@ return (
           r.customer === selectedInvoice.customer && 
           parseDateString(r.date) < dateOfThisInvoice
         );
-        const calculatedOldDebt = customerInvoices.reduce((sum, i) => sum + i.debt, 0) - 
-                        customerReturns.reduce((sum, r) => sum + (r.total - r.paid), 0);
+        const calculatedOldDebt = getCustomerDebt(customerInvoices, customerReturns, returnSalesOrders || []);
         const oldDebt = selectedInvoice.oldDebt !== undefined ? selectedInvoice.oldDebt : calculatedOldDebt;
         
         return (

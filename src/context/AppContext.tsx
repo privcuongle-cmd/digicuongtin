@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, ReactNode, useEffect, useCa
 import { AppState, Product, Customer, Supplier, Invoice, ImportOrder, CashTransaction, POSDraft, ImportDraft, MaintenanceRecord, MaintenanceTransfer, ReturnImportOrder, ReturnSalesOrder, User, Serial, StockCard, PrintSettings, ExternalSerial, ImageItem, Task, TelegramSettings, WifiRecord, CameraAccountRecord, CameraInstallation, Wallet } from '../types';
 import { apiService, getPendingQueue, replayPendingQueue } from '../services/api';
 import { generateId, resolveIdCollision } from '../lib/idUtils';
-import { formatDateTime, padPhone, formatSnForDb, parseSnFromDb, parseFormattedNumber } from '../lib/utils';
+import { formatDateTime, padPhone, formatSnForDb, parseSnFromDb, parseFormattedNumber, getCustomerDebt } from '../lib/utils';
 import { sendNotification, sendTelegramMessage } from '../lib/notification';
 
 interface AppContextProps extends AppState {
@@ -353,7 +353,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             return {
               id: String(ret.id || ''),
               date: formatDateTime(ret.createdAt || ret.date),
-              customer: String(ret.customerID || ret.customer || ''),
+              customerId: String(ret.customerId || (ret.customerID && String(ret.customerID).startsWith('KH') ? ret.customerID : '') || ''),
+              customer: String(ret.customerID_str || ret.customer || (!String(ret.customerID).startsWith('KH') ? ret.customerID : '') || ''),
+              invoiceId: String(ret.invoiceID || ret.invoiceId || ret.InvoiceID || ''),
               totalGoods: parseFormattedNumber(ret.totalGoods || 0),
               discount: parseFormattedNumber(ret.discount || 0),
               total: parseFormattedNumber(ret.totalAmount || ret.totalRefund || ret.total || 0),
@@ -892,17 +894,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateCustomerStats = async (customerName: string) => {
     setState(prev => {
-      const customer = prev.customers.find(c => c.name === customerName);
+      const customer = prev.customers.find(c => c.name && customerName && c.name.trim().toLowerCase() === customerName.trim().toLowerCase());
       if (!customer) return prev;
 
-      const customerInvoices = prev.invoices.filter(inv => inv.customer === customerName);
-      const customerReturns = prev.returnSalesOrders.filter(ret => ret.customer === customerName);
+      const customerInvoices = prev.invoices.filter(inv => {
+        const matchId = !!(inv.customerId && inv.customerId === customer.id);
+        const matchPhone = !!(inv.phone && inv.phone !== '---' && customer.phone && inv.phone.trim() === customer.phone.trim());
+        const matchName = !!(inv.customer && customer.name && inv.customer.trim().toLowerCase() === customer.name.trim().toLowerCase());
+        return matchId || (!inv.customerId && (matchPhone || matchName));
+      });
       
-      const totalSpent = customerInvoices.reduce((sum, inv) => sum + inv.total, 0) - 
-                         customerReturns.reduce((sum, ret) => sum + ret.total, 0);
+      const customerInvoiceIds = new Set(customerInvoices.map(inv => inv.id));
+
+      const customerReturns = prev.returnSalesOrders.filter(ret => {
+        const matchId = !!(ret.customerId && ret.customerId === customer.id);
+        const matchInvoice = !!(ret.invoiceId && customerInvoiceIds.has(ret.invoiceId));
+        const matchName = !!(ret.customer && customer.name && ret.customer.trim().toLowerCase() === customer.name.trim().toLowerCase());
+        return matchId || matchInvoice || matchName;
+      });
       
-      const debt = customerInvoices.reduce((sum, inv) => sum + inv.debt, 0) - 
-                   customerReturns.reduce((sum, ret) => sum + (ret.total - ret.paid), 0);
+      const totalSpent = Math.max(0, customerInvoices.reduce((sum, inv) => sum + inv.total, 0) - 
+                         customerReturns.reduce((sum, ret) => sum + ret.total, 0));
+      
+      const debt = getCustomerDebt(customerInvoices, customerReturns, prev.returnSalesOrders);
 
       const updatedCustomer = { ...customer, totalSpent, debt };
 
@@ -913,7 +927,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       return {
         ...prev,
-        customers: prev.customers.map(c => c.name === customerName ? updatedCustomer : c)
+        customers: prev.customers.map(c => c.id === customer.id ? updatedCustomer : c)
       };
     });
   };
@@ -1882,6 +1896,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           createdAt: order.date,
           date: order.date, // Fallback
           customerID: order.customer,
+          customerID_str: order.customer,
+          customerId: order.customerId || '',
+          invoiceID: order.invoiceId || '',
+          invoiceId: order.invoiceId || '',
           totalGoods: order.totalGoods,
           discount: order.discount,
           totalAmount: order.total,
