@@ -174,6 +174,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     localStorage.setItem('cuongtin_erp_state', JSON.stringify(state));
   }, [state]);
 
+  const deduplicateById = <T extends { id: string }>(items: T[]): T[] => {
+    const result: T[] = [];
+    const seen = new Set<string>();
+    for (let i = items.length - 1; i >= 0; i--) {
+      const item = items[i];
+      if (!item || !item.id) continue;
+      const upperId = item.id.trim().toUpperCase();
+      if (!seen.has(upperId)) {
+        seen.add(upperId);
+        result.unshift(item);
+      } else {
+        console.warn(`[DATA INTEGRITY] Removed duplicate record with ID: ${item.id}`);
+      }
+    }
+    return result;
+  };
+
   const isSyncingRef = useRef(false);
 
   const syncData = useCallback(async (forceRefresh = false) => {
@@ -325,7 +342,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         };
 
         const validApiInvoices = (apiInvoices || []).filter((inv: any) => inv && inv.id && String(inv.id).trim() !== '');
-        const mappedInvoices = validApiInvoices.length > 0 ? validApiInvoices.map((inv: any) => {
+        const mappedInvoices = deduplicateById(validApiInvoices.length > 0 ? validApiInvoices.map((inv: any) => {
             const total = parseFormattedNumber(inv.finalAmount || inv.total || 0);
             const paid = parseFormattedNumber(inv.paidAmount || inv.paid || 0);
             const debt = inv.debt !== undefined ? parseFormattedNumber(inv.debt) : (total - paid);
@@ -347,10 +364,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               walletId: String(inv.walletId || ''),
               items: extractItems(inv, apiInvoiceDetails, ['invoiceID', 'invoiceId', 'InvoiceID', 'invoiceid'], true)
             };
-          }) : [];
+          }) : []);
 
         const validApiReturnSales = (apiReturnSales || []).filter((ret: any) => ret && ret.id && String(ret.id).trim() !== '');
-        const mappedReturnSales = validApiReturnSales.length > 0 ? validApiReturnSales.map((ret: any) => {
+        const mappedReturnSales = deduplicateById(validApiReturnSales.length > 0 ? validApiReturnSales.map((ret: any) => {
             return {
               id: String(ret.id || ''),
               date: formatDateTime(ret.createdAt || ret.date),
@@ -365,10 +382,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               note: String(ret.note || ''),
               items: extractItems(ret, apiReturnSalesDetails, ['returnID', 'returnId', 'ReturnID', 'returnid', 'returnSalesId'], true)
             };
-          }) : [];
+          }) : []);
 
         const validApiReturnImports = (apiReturnImports || []).filter((ret: any) => ret && ret.id && String(ret.id).trim() !== '');
-        const mappedReturnImports = validApiReturnImports.length > 0 ? validApiReturnImports.map((ret: any) => {
+        const mappedReturnImports = deduplicateById(validApiReturnImports.length > 0 ? validApiReturnImports.map((ret: any) => {
             return {
               id: String(ret.id || ''),
               date: formatDateTime(ret.createdAt || ret.date),
@@ -381,10 +398,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               note: String(ret.note || ''),
               items: extractItems(ret, apiReturnImportDetails, ['returnID', 'returnId', 'ReturnID', 'returnid', 'returnImportId'])
             };
-          }) : [];
+          }) : []);
 
         const validApiImports = (apiImports || []).filter((imp: any) => imp && imp.id && String(imp.id).trim() !== '');
-        const mappedImports = validApiImports.length > 0 ? validApiImports.map((imp: any) => {
+        const mappedImports = deduplicateById(validApiImports.length > 0 ? validApiImports.map((imp: any) => {
           const total = parseFormattedNumber(imp.totalAmount || imp.total || 0);
           const paid = parseFormattedNumber(imp.paidAmount || imp.paid || 0);
           // Calculate debt based on total and paid, ignore the debt field from API if it's 0 but total > paid
@@ -413,7 +430,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             walletId: String(imp.walletId || ''),
             items: extractItems(imp, apiImportDetails, ['importID', 'importId', 'ImportID', 'importid'])
           };
-        }) : [];
+        }) : []);
 
         const soldSerials = new Set<string>();
         const processSerials = (items: any[], action: 'add' | 'delete') => {
@@ -523,7 +540,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               totalSpent: parseFormattedNumber(c.totalSpent),
               debt: parseFormattedNumber(c.debt),
               image: String(c.image || ''),
-              status: c.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE'
+              status: (() => {
+                const rawStatus = String(c.status || c.trangThai || c['trạng thái'] || c['trạngThái'] || c.trang_thai || c.trangthai || '').trim().toUpperCase();
+                return (rawStatus === 'INACTIVE' || rawStatus === 'NGỪNG HOẠT ĐỘNG' || rawStatus === 'NGUNG HOAT DONG') ? 'INACTIVE' : 'ACTIVE';
+              })()
             })) : [],
             suppliers: validApiSuppliers.length > 0 ? validApiSuppliers.map((s: any) => ({
               id: String(s.id || ''),
@@ -544,7 +564,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           importOrders: mappedImports,
           returnImportOrders: mappedReturnImports,
           returnSalesOrders: mappedReturnSales,
-          cashTransactions: apiCash.length > 0 ? apiCash.map((c: any) => ({
+          cashTransactions: apiCash.length > 0 ? deduplicateById(apiCash.map((c: any) => ({
             id: String(c.id || ''),
             date: formatDateTime(c.createdAt || c.date),
             type: c.type as 'RECEIPT' | 'PAYMENT',
@@ -554,8 +574,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             note: String(c.note || ''),
             refId: String(c.referenceId || c.refId || ''),
             walletId: c.walletId ? String(c.walletId) : undefined
-          })) : [],
-          maintenanceRecords: apiMaintenance.length > 0 ? apiMaintenance.map((m: any) => ({
+          }))) : [],
+          maintenanceRecords: apiMaintenance.length > 0 ? deduplicateById(apiMaintenance.map((m: any) => ({
             id: String(m.id || ''),
             date: formatDateTime(m.createdAt || m.date),
             customerName: String(m.customerName || ''),
@@ -572,7 +592,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             warrantyRemainingInfo: String(m.warrantyRemainingInfo || ''),
             invoiceId: m.invoiceId ? String(m.invoiceId) : undefined,
             taskId: String(m.taskId || m.taskID || m.TaskID || '')
-          })) : [],
+          }))) : [],
           maintenanceTransfers: apiMaintenanceTransfers && apiMaintenanceTransfers.length > 0 ? apiMaintenanceTransfers.map((t: any) => ({
             id: String(t.id || ''),
             maintenanceRecordId: String(t.maintenanceRecordId || ''),
@@ -604,7 +624,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             bankInfo: apiSettings[0].bankInfo || defaultPrintSettings.bankInfo,
             footNote: apiSettings[0].footNote || defaultPrintSettings.footNote
           } : prev.printSettings,
-          tasks: apiTasks && apiTasks.length > 0 ? apiTasks.map((t: any) => ({
+          tasks: apiTasks && apiTasks.length > 0 ? deduplicateById(apiTasks.map((t: any) => ({
             id: String(t.id || ''),
             title: String(t.title || ''),
             description: String(t.description || ''),
@@ -624,7 +644,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             repairId: String(t.repairId || ''),
             feedback: String(t.feedback || ''),
             feedbackHistory: t.feedbackHistory ? (typeof t.feedbackHistory === 'string' ? JSON.parse(t.feedbackHistory) : t.feedbackHistory) : undefined
-          })) : [],
+          }))) : [],
           wifiRecords: apiWifiRecords && apiWifiRecords.length > 0 ? apiWifiRecords.map((w: any) => ({
             id: String(w.id || ''),
             customerName: String(w.customerName || ''),
@@ -785,7 +805,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
               return {
                 ...prev,
-                invoices: [...prev.invoices, ...mappedNew]
+                invoices: deduplicateById([...prev.invoices, ...mappedNew])
               };
             }
             return prev;
@@ -1063,7 +1083,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     
     // Resolve ID collision if it's not explicitly an edit but proposed ID already exists
     let finalId = invoice.id || generateId('HDN', currentInvoices);
-    const resolvedIsUpdate = isExplicitEdit !== undefined ? isExplicitEdit : !!currentInvoices.find(inv => inv.id === finalId);
+    const resolvedIsUpdate = !!isExplicitEdit;
     
     if (!resolvedIsUpdate && currentInvoices.some(inv => inv.id === finalId)) {
       const resolvedId = resolveIdCollision(finalId, currentInvoices.map(inv => inv.id));

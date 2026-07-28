@@ -484,11 +484,12 @@ return (
               <th className="p-3 text-left">Tên khách hàng</th>
               <th className="p-3 text-left">Điện thoại</th>
               <th className="p-3 text-left">Địa chỉ</th>
+              <th className="p-3 text-center">Trạng thái</th>
               <th className="p-3 text-right">Số ngày nợ</th>
               <th className="p-3 text-right">Nợ hiện tại</th>
             </tr>
             <tr className="bg-slate-50/50 text-slate-800 text-[13px] font-bold border-b border-slate-100">
-              <td colSpan={6} className="p-3"></td>
+              <td colSpan={7} className="p-3"></td>
               <td className="p-3 text-right">
                 {formatNumber(filteredCustomers.reduce((sum, c) => sum + getCustomerStats(c).debt, 0))}
               </td>
@@ -497,7 +498,7 @@ return (
           <tbody className="divide-y divide-slate-100 bg-white">
             {paginatedCustomers.length === 0 ? (
               <tr>
-                <td colSpan={7} className="p-10 text-center text-slate-400 italic text-sm">Chưa có khách hàng.</td>
+                <td colSpan={8} className="p-10 text-center text-slate-400 italic text-sm">Chưa có khách hàng.</td>
               </tr>
             ) : (
               paginatedCustomers.map((c, idx) => {
@@ -527,6 +528,17 @@ return (
                         {c.phone2 && <p className="text-xs text-slate-500 mt-0.5">{c.phone2}</p>}
                       </td>
                       <td className="p-3 text-slate-500">{c.address || '---'}</td>
+                      <td className="p-3 text-center">
+                        {c.status === 'INACTIVE' ? (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-600 border border-red-200">
+                            Ngừng hoạt động
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200">
+                            Đang hoạt động
+                          </span>
+                        )}
+                      </td>
                       <td className="p-3 text-slate-500 text-right">{stats.debtDays > 0 ? `${stats.debtDays} ngày` : '---'}</td>
                       <td className={`p-3 text-right text-base font-bold ${stats.debt > 0 ? 'text-red-500' : 'text-slate-800'}`}>{formatNumber(stats.debt)}</td>
                     </tr>
