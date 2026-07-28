@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Store, Search, Truck, Bell, Settings, ChevronDown, ShoppingCart, Home, Box, FileText, Users, Package, History, RotateCcw, ClipboardList, PlusCircle, Tag, ShieldCheck, Wallet, LogOut, Menu, ArrowLeftRight, Printer, DollarSign, Wrench, Send, Wifi, RefreshCw, Hash, Image as ImageIcon, Camera } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { useMobileBackModal } from '../hooks/useMobileBackModal';
+import { hasPermission } from '../types';
 
 export const Layout: React.FC = () => {
   const location = useLocation();
@@ -104,8 +105,8 @@ export const Layout: React.FC = () => {
         {
           title: 'Tài chính',
           items: [
-            { label: 'Sổ quỹ', path: '/cash-ledger', icon: <Wallet size={14} /> },
-            { label: 'Quản lý Ví', path: '/wallets', icon: <Wallet size={14} /> },
+            ...(hasPermission(currentUser, 'canManageCashLedger') ? [{ label: 'Sổ quỹ', path: '/cash-ledger', icon: <Wallet size={14} /> }] : []),
+            ...(hasPermission(currentUser, 'canManageWallet') ? [{ label: 'Quản lý Ví', path: '/wallets', icon: <Wallet size={14} /> }] : []),
           ]
         }
       ]
@@ -118,7 +119,7 @@ export const Layout: React.FC = () => {
         {
           items: [
             { label: 'Khách hàng', path: '/customers', icon: <Users size={14} /> },
-            { label: 'Nhà cung cấp', path: '/suppliers', icon: <Truck size={14} /> },
+            ...(hasPermission(currentUser, 'canManageSuppliers') ? [{ label: 'Nhà cung cấp', path: '/suppliers', icon: <Truck size={14} /> }] : []),
           ]
         }
       ]

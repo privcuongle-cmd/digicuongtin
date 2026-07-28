@@ -2,11 +2,13 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { PieChart, ChevronRight, BarChart3, Calendar, Tag, ArrowUpRight, ArrowDownRight, Package, Users } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { useSearchParams } from 'react-router-dom';
+import { hasPermission } from '../types';
 
 type ReportCategory = 'END_OF_DAY' | 'SALES' | 'ORDERS' | 'INVENTORY' | 'CUSTOMERS' | 'SUPPLIERS' | 'EMPLOYEES' | 'CHANNELS' | 'FINANCE';
 
 export const Reports: React.FC = () => {
-  const { invoices, cashTransactions } = useAppContext();
+  const { invoices, cashTransactions, currentUser } = useAppContext();
+  const canViewProfit = hasPermission(currentUser, 'canViewProfit');
   const [searchParams] = useSearchParams();
   const [activeCategory, setActiveCategory] = useState<ReportCategory>('END_OF_DAY');
   const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
@@ -122,13 +124,15 @@ export const Reports: React.FC = () => {
             <p className="text-xs text-slate-500 mt-2 font-medium">{todayInvoices.length} đơn hàng</p>
           </div>
 
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-amber-500">
-            <div className="flex items-center gap-2 text-amber-600 mb-2">
-              <BarChart3 size={20} />
-              <h3 className="font-bold text-sm tracking-wider uppercase">Lợi nhuận gộp</h3>
+          {canViewProfit && (
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-amber-500">
+              <div className="flex items-center gap-2 text-amber-600 mb-2">
+                <BarChart3 size={20} />
+                <h3 className="font-bold text-sm tracking-wider uppercase">Lợi nhuận gộp</h3>
+              </div>
+              <p className="text-3xl font-black text-slate-800 tracking-tighter">{profitToday.toLocaleString()}đ</p>
             </div>
-            <p className="text-3xl font-black text-slate-800 tracking-tighter">{profitToday.toLocaleString()}đ</p>
-          </div>
+          )}
         </div>
       </div>
     );
@@ -256,13 +260,15 @@ export const Reports: React.FC = () => {
 
   const renderFinanceReport = () => (
     <div className="space-y-6 pb-6">
-      <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 text-center relative overflow-hidden">
-        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">Lợi nhuận gộp hệ thống</p>
-        <h2 className="text-4xl font-black text-emerald-600 tracking-tighter">{totalProfit.toLocaleString()}đ</h2>
-        <div className="absolute top-0 right-0 p-6 opacity-5 text-8xl">
-          <PieChart size={120} />
+      {canViewProfit && (
+        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 text-center relative overflow-hidden">
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">Lợi nhuận gộp hệ thống</p>
+          <h2 className="text-4xl font-black text-emerald-600 tracking-tighter">{totalProfit.toLocaleString()}đ</h2>
+          <div className="absolute top-0 right-0 p-6 opacity-5 text-8xl">
+            <PieChart size={120} />
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="grid md:grid-cols-2 gap-4">
         {sortedMonths.length === 0 ? (
@@ -278,15 +284,17 @@ export const Reports: React.FC = () => {
                   {months[m].orders} Giao dịch
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className={`grid ${canViewProfit ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
                 <div>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Tổng doanh thu</p>
                   <p className="font-black text-slate-800 text-2xl tracking-tighter">{months[m].rev.toLocaleString()}đ</p>
                 </div>
-                <div className="border-l border-slate-100 pl-4">
-                  <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest mb-1">Lợi nhuận gộp</p>
-                  <p className="font-black text-emerald-600 text-2xl tracking-tighter">{months[m].profit.toLocaleString()}đ</p>
-                </div>
+                {canViewProfit && (
+                  <div className="border-l border-slate-100 pl-4">
+                    <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest mb-1">Lợi nhuận gộp</p>
+                    <p className="font-black text-emerald-600 text-2xl tracking-tighter">{months[m].profit.toLocaleString()}đ</p>
+                  </div>
+                )}
               </div>
             </div>
           ))

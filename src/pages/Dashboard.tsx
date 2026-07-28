@@ -36,6 +36,7 @@ import {
   Layers
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import { hasPermission } from '../types';
 import { formatNumber, formatDateTime, smartParseDate, formatDate, formatDateDayMonth } from '../lib/utils';
 import { useScrollLock } from '../hooks/useScrollLock';
 import { useMobileBackModal } from '../hooks/useMobileBackModal';
@@ -60,8 +61,10 @@ export const Dashboard: React.FC = () => {
     maintenanceRecords,
     customers,
     suppliers,
-    products
+    products,
+    currentUser
   } = useAppContext();
+  const canViewProfit = hasPermission(currentUser, 'canViewProfit');
   const [showProfit, setShowProfit] = useState(false);
   const [showDateModal, setShowDateModal] = useState(false);
   const [dateRange, setDateRange] = useState<'today' | 'yesterday' | 'last_7_days' | 'this_month' | 'last_month' | 'this_year'>('this_month');
@@ -555,10 +558,12 @@ return (
                   <p className="text-blue-100 text-[11px] font-normal tracking-widest mb-2 opacity-90">Doanh thu hệ thống</p>
                   <h2 className="text-4xl md:text-5xl font-medium mb-10 tracking-tight drop-shadow-md">{formatNumber(stats.totalRevenue)}đ</h2>
                 </div>
-                <div className="text-right">
-                  <p className="text-blue-100 text-[11px] font-normal tracking-widest mb-2 opacity-90">Lợi nhuận</p>
-                  <h2 className="text-3xl md:text-4xl font-medium mb-10 tracking-tight drop-shadow-md text-emerald-300">{formatNumber(stats.totalProfit)}đ</h2>
-                </div>
+                {canViewProfit && (
+                  <div className="text-right">
+                    <p className="text-blue-100 text-[11px] font-normal tracking-widest mb-2 opacity-90">Lợi nhuận</p>
+                    <h2 className="text-3xl md:text-4xl font-medium mb-10 tracking-tight drop-shadow-md text-emerald-300">{formatNumber(stats.totalProfit)}đ</h2>
+                  </div>
+                )}
               </div>
               <div className="flex gap-4">
                 <div className="bg-white/10 backdrop-blur-md px-6 py-4 rounded-lg border border-white/20 shadow-xl flex-1">
@@ -1085,24 +1090,26 @@ return (
                 <span className="text-[10px] font-medium text-slate-500 shrink-0">đ</span>
               </div>
             </div>
-            <div className="text-right shrink-0 max-w-[50%]">
-              <div className="flex items-center justify-end gap-2 mb-1">
-                <p className="text-slate-400 text-[11px] font-normal tracking-wider">Lợi nhuận</p>
-                <button onClick={() => setShowProfit(!showProfit)} className="text-slate-400 shrink-0">
-                  {showProfit ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
+            {canViewProfit && (
+              <div className="text-right shrink-0 max-w-[50%]">
+                <div className="flex items-center justify-end gap-2 mb-1">
+                  <p className="text-slate-400 text-[11px] font-normal tracking-wider">Lợi nhuận</p>
+                  <button onClick={() => setShowProfit(!showProfit)} className="text-slate-400 shrink-0">
+                    {showProfit ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                <div className="flex items-baseline justify-end gap-1 overflow-hidden">
+                  {showProfit ? (
+                    <>
+                      <span className="text-xl sm:text-2xl font-bold text-emerald-500 tracking-tight truncate">{formatKilo(stats.totalProfit)}</span>
+                      <span className="text-[10px] font-medium text-slate-500 shrink-0">đ</span>
+                    </>
+                  ) : (
+                    <span className="text-xl sm:text-2xl font-bold text-emerald-500 tracking-widest shrink-0">*** ***</span>
+                  )}
+                </div>
               </div>
-              <div className="flex items-baseline justify-end gap-1 overflow-hidden">
-                {showProfit ? (
-                  <>
-                    <span className="text-xl sm:text-2xl font-bold text-emerald-500 tracking-tight truncate">{formatKilo(stats.totalProfit)}</span>
-                    <span className="text-[10px] font-medium text-slate-500 shrink-0">đ</span>
-                  </>
-                ) : (
-                  <span className="text-xl sm:text-2xl font-bold text-emerald-500 tracking-widest shrink-0">*** ***</span>
-                )}
-              </div>
-            </div>
+            )}
           </div>
           
           <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-50">

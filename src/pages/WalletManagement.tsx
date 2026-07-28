@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Wallet } from '../types';
-import { Plus, ArrowLeftRight, Activity, X, Wallet as WalletIcon, Landmark, CreditCard, Smartphone, Coins, PiggyBank, Briefcase, Pencil, History, Image as ImageIcon } from 'lucide-react';
+import { Wallet, hasPermission } from '../types';
+import { Plus, ArrowLeftRight, Activity, X, Wallet as WalletIcon, Landmark, CreditCard, Smartphone, Coins, PiggyBank, Briefcase, Pencil, History, Image as ImageIcon, AlertCircle } from 'lucide-react';
 import { formatNumber, formatDateTime, parseDateString } from '../lib/utils';
 import { generateId } from '../lib/idUtils';
 import { ImageLibraryModal } from '../components/ImageLibraryModal';
@@ -71,10 +71,12 @@ export const WalletManagement: React.FC = () => {
   useMobileBackModal(isTransactionModalOpen, () => setIsTransactionModalOpen(false));
   useMobileBackModal(!!editingWallet, () => setEditingWallet(null));
 
-  if (currentUser?.role !== 'ADMIN') {
+  if (!hasPermission(currentUser, 'canManageWallet')) {
     return (
-      <div className="p-8 text-center text-rose-500 font-bold bg-white rounded-2xl shadow-sm m-4">
-        Bạn không có quyền truy cập chức năng này.
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-500 p-6">
+        <AlertCircle size={48} className="mb-4 text-red-400" />
+        <p className="text-lg font-bold text-slate-800">Truy cập bị từ chối</p>
+        <p className="text-sm text-slate-500">Bạn không có quyền truy cập chức năng Quản lý ví.</p>
       </div>
     );
   }

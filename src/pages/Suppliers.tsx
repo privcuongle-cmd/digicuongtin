@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, UserPlus, Truck, X, FileText, Calendar, Wallet, ChevronRight, CreditCard, Package, Hash, Printer, Download, Upload, LayoutGrid, Settings, HelpCircle, ChevronDown, Filter, RotateCcw, ExternalLink, ChevronLeft } from 'lucide-react';
+import { Search, UserPlus, Truck, X, FileText, Calendar, Wallet, ChevronRight, CreditCard, Package, Hash, Printer, Download, Upload, LayoutGrid, Settings, HelpCircle, ChevronDown, Filter, RotateCcw, ExternalLink, ChevronLeft, AlertCircle } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { Supplier, ImportOrder, CashTransaction } from '../types';
+import { Supplier, ImportOrder, CashTransaction, hasPermission } from '../types';
 import { formatNumber, parseFormattedNumber, parseDateString } from '../lib/utils';
 import { generateId } from '../lib/idUtils';
 import { PrintTemplate } from '../components/PrintTemplate';
@@ -11,11 +11,21 @@ import { useMobileBackModal } from '../hooks/useMobileBackModal';
 
 export const Suppliers: React.FC = () => {
   const navigate = useNavigate();
-  const { suppliers, addSupplier, importOrders, updateImportOrder, addCashTransaction, setImportDraft, cashTransactions, wallets } = useAppContext();
+  const { suppliers, addSupplier, importOrders, updateImportOrder, addCashTransaction, setImportDraft, cashTransactions, wallets, currentUser } = useAppContext();
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<ImportOrder | null>(null);
+
+  if (!hasPermission(currentUser, 'canManageSuppliers')) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-500 p-6">
+        <AlertCircle size={48} className="mb-4 text-red-400" />
+        <p className="text-lg font-bold text-slate-800">Truy cập bị từ chối</p>
+        <p className="text-sm text-slate-500">Bạn không có quyền sử dụng chức năng Nhà cung cấp.</p>
+      </div>
+    );
+  }
   
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');

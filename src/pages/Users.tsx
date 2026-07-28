@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { useScrollLock } from '../hooks/useScrollLock';
-import { User } from '../types';
+import { User, hasPermission, UserPermissions } from '../types';
 import { useMobileBackModal } from '../hooks/useMobileBackModal';
-import { Plus, Search, Edit2, Trash2, Shield, User as UserIcon, Mail, Key, X, Check, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Shield, User as UserIcon, Mail, Key, X, Check, AlertCircle, ChevronLeft, ChevronRight, TrendingUp, Truck, Wallet, CreditCard } from 'lucide-react';
 
 const Users: React.FC = () => {
   const { users, currentUser, addUser, updateUser, deleteUser } = useAppContext();
@@ -20,6 +20,12 @@ const Users: React.FC = () => {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [role, setRole] = useState<'ADMIN' | 'CASHIER' | 'STOCKKEEPER'>('CASHIER');
+
+  // Permission checkboxes state
+  const [canViewProfit, setCanViewProfit] = useState(true);
+  const [canManageSuppliers, setCanManageSuppliers] = useState(true);
+  const [canManageCashLedger, setCanManageCashLedger] = useState(true);
+  const [canManageWallet, setCanManageWallet] = useState(true);
 
   const filteredUsers = users.filter(u => 
     u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -40,14 +46,32 @@ const Users: React.FC = () => {
       setPassword(''); // Don't show password
       setName(user.name);
       setRole(user.role);
+      setCanViewProfit(hasPermission(user, 'canViewProfit'));
+      setCanManageSuppliers(hasPermission(user, 'canManageSuppliers'));
+      setCanManageCashLedger(hasPermission(user, 'canManageCashLedger'));
+      setCanManageWallet(hasPermission(user, 'canManageWallet'));
     } else {
       setEditingUser(null);
       setUsername('');
       setPassword('');
       setName('');
       setRole('CASHIER');
+      setCanViewProfit(false);
+      setCanManageSuppliers(false);
+      setCanManageCashLedger(true);
+      setCanManageWallet(false);
     }
     setIsModalOpen(true);
+  };
+
+  const handleSelectRole = (r: 'ADMIN' | 'CASHIER' | 'STOCKKEEPER') => {
+    setRole(r);
+    if (r === 'ADMIN') {
+      setCanViewProfit(true);
+      setCanManageSuppliers(true);
+      setCanManageCashLedger(true);
+      setCanManageWallet(true);
+    }
   };
 
   const handleSave = async () => {
@@ -56,11 +80,23 @@ const Users: React.FC = () => {
       return;
     }
 
+    const userPermissions: UserPermissions = {
+      canViewProfit,
+      canManageSuppliers,
+      canManageCashLedger,
+      canManageWallet
+    };
+
     if (editingUser) {
       await updateUser(editingUser.id, {
         username,
         name,
         role,
+        permissions: userPermissions,
+        canViewProfit,
+        canManageSuppliers,
+        canManageCashLedger,
+        canManageWallet,
         ...(password ? { password } : {})
       });
     } else {
@@ -69,7 +105,12 @@ const Users: React.FC = () => {
         username,
         password,
         name,
-        role
+        role,
+        permissions: userPermissions,
+        canViewProfit,
+        canManageSuppliers,
+        canManageCashLedger,
+        canManageWallet
       });
     }
     setIsModalOpen(false);
@@ -157,14 +198,38 @@ const Users: React.FC = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                      user.role === 'ADMIN' ? 'bg-purple-100 text-purple-700' :
-                      user.role === 'CASHIER' ? 'bg-blue-100 text-blue-700' :
-                      'bg-orange-100 text-orange-700'
-                    }`}>
-                      <Shield size={10} />
-                      {user.role === 'ADMIN' ? 'Quản trị viên' : user.role === 'CASHIER' ? 'Thu ngân' : 'Kho hàng'}
-                    </span>
+                    <div className="flex flex-col gap-1.5">
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider w-fit ${
+                        user.role === 'ADMIN' ? 'bg-purple-100 text-purple-700' :
+                        user.role === 'CASHIER' ? 'bg-blue-100 text-blue-700' :
+                        'bg-orange-100 text-orange-700'
+                      }`}>
+                        <Shield size={10} />
+                        {user.role === 'ADMIN' ? 'Quản trị viên' : user.role === 'CASHIER' ? 'Thu ngân' : 'Kho hàng'}
+                      </span>
+                      <div className="flex flex-wrap gap-1 mt-0.5">
+                        {hasPermission(user, 'canViewProfit') && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded flex items-center gap-1">
+                            <TrendingUp size={9} /> Lợi nhuận
+                          </span>
+                        )}
+                        {hasPermission(user, 'canManageSuppliers') && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded flex items-center gap-1">
+                            <Truck size={9} /> NCC
+                          </span>
+                        )}
+                        {hasPermission(user, 'canManageCashLedger') && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded flex items-center gap-1">
+                            <Wallet size={9} /> Sổ quỹ
+                          </span>
+                        )}
+                        {hasPermission(user, 'canManageWallet') && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded flex items-center gap-1">
+                            <CreditCard size={9} /> Ví
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-2">
@@ -330,7 +395,7 @@ const Users: React.FC = () => {
                   {(['ADMIN', 'CASHIER', 'STOCKKEEPER'] as const).map(r => (
                     <button
                       key={r}
-                      onClick={() => setRole(r)}
+                      onClick={() => handleSelectRole(r)}
                       className={`py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-all ${
                         role === r 
                           ? 'bg-blue-600 border-blue-600 text-white shadow-md' 
@@ -340,6 +405,93 @@ const Users: React.FC = () => {
                       {r === 'ADMIN' ? 'Quản trị' : r === 'CASHIER' ? 'Thu ngân' : 'Kho hàng'}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* Permissions checkboxes section */}
+              <div className="space-y-3 pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Shield size={14} className="text-blue-600" />
+                    Phân quyền tính năng
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    Tích chọn các quyền cho phép tài khoản này sử dụng
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  {/* 1. Quyền xem lợi nhuận */}
+                  <label className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                    canViewProfit ? 'bg-emerald-50/70 border-emerald-200 text-slate-800' : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100/50'
+                  }`}>
+                    <input 
+                      type="checkbox"
+                      checked={canViewProfit}
+                      onChange={(e) => setCanViewProfit(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-bold block text-slate-800 flex items-center gap-1">
+                        <TrendingUp size={12} className="text-emerald-600" /> Xem lợi nhuận
+                      </span>
+                      <span className="text-[10px] text-slate-400 block leading-tight mt-0.5">Hiển thị thông số lợi nhuận gộp trên Báo cáo & Tổng quan</span>
+                    </div>
+                  </label>
+
+                  {/* 2. Chức năng nhà cung cấp */}
+                  <label className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                    canManageSuppliers ? 'bg-blue-50/70 border-blue-200 text-slate-800' : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100/50'
+                  }`}>
+                    <input 
+                      type="checkbox"
+                      checked={canManageSuppliers}
+                      onChange={(e) => setCanManageSuppliers(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-bold block text-slate-800 flex items-center gap-1">
+                        <Truck size={12} className="text-blue-600" /> Quản lý Nhà cung cấp
+                      </span>
+                      <span className="text-[10px] text-slate-400 block leading-tight mt-0.5">Truy cập danh sách, công nợ & giao dịch NCC</span>
+                    </div>
+                  </label>
+
+                  {/* 3. Chức năng sổ quỹ */}
+                  <label className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                    canManageCashLedger ? 'bg-amber-50/70 border-amber-200 text-slate-800' : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100/50'
+                  }`}>
+                    <input 
+                      type="checkbox"
+                      checked={canManageCashLedger}
+                      onChange={(e) => setCanManageCashLedger(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-bold block text-slate-800 flex items-center gap-1">
+                        <Wallet size={12} className="text-amber-600" /> Chức năng Sổ quỹ
+                      </span>
+                      <span className="text-[10px] text-slate-400 block leading-tight mt-0.5">Lập phiếu thu/chi & theo dõi dòng tiền mặt</span>
+                    </div>
+                  </label>
+
+                  {/* 4. Quản lý ví */}
+                  <label className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                    canManageWallet ? 'bg-purple-50/70 border-purple-200 text-slate-800' : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100/50'
+                  }`}>
+                    <input 
+                      type="checkbox"
+                      checked={canManageWallet}
+                      onChange={(e) => setCanManageWallet(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-bold block text-slate-800 flex items-center gap-1">
+                        <CreditCard size={12} className="text-purple-600" /> Quản lý ví
+                      </span>
+                      <span className="text-[10px] text-slate-400 block leading-tight mt-0.5">Xem & quản lý số dư, nạp/rút tiền ví điện tử</span>
+                    </div>
+                  </label>
                 </div>
               </div>
             </div>

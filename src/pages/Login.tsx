@@ -69,11 +69,32 @@ return () => clearInterval(interval);
         if (sheetRole === 'ADMIN') appRole = 'ADMIN';
         else if (sheetRole === 'STOCKKEEPER') appRole = 'STOCKKEEPER';
 
+        let permissions = matchedUser.permissions;
+        if (typeof permissions === 'string') {
+          try { permissions = JSON.parse(permissions); } catch (e) { permissions = undefined; }
+        }
+        const canViewProfit = matchedUser.canViewProfit !== undefined ? (String(matchedUser.canViewProfit) === 'true' || matchedUser.canViewProfit === true) : permissions?.canViewProfit;
+        const canManageSuppliers = matchedUser.canManageSuppliers !== undefined ? (String(matchedUser.canManageSuppliers) === 'true' || matchedUser.canManageSuppliers === true) : permissions?.canManageSuppliers;
+        const canManageCashLedger = matchedUser.canManageCashLedger !== undefined ? (String(matchedUser.canManageCashLedger) === 'true' || matchedUser.canManageCashLedger === true) : permissions?.canManageCashLedger;
+        const canManageWallet = matchedUser.canManageWallet !== undefined ? (String(matchedUser.canManageWallet) === 'true' || matchedUser.canManageWallet === true) : permissions?.canManageWallet;
+
+        const userPermissions = {
+          canViewProfit: canViewProfit ?? (appRole === 'ADMIN'),
+          canManageSuppliers: canManageSuppliers ?? (appRole === 'ADMIN'),
+          canManageCashLedger: canManageCashLedger ?? (appRole === 'ADMIN'),
+          canManageWallet: canManageWallet ?? (appRole === 'ADMIN'),
+        };
+
         login({
           id: String(matchedUser.id),
           username: String(matchedUser.username),
           name: String(matchedUser.name),
-          role: appRole
+          role: appRole,
+          permissions: userPermissions,
+          canViewProfit: userPermissions.canViewProfit,
+          canManageSuppliers: userPermissions.canManageSuppliers,
+          canManageCashLedger: userPermissions.canManageCashLedger,
+          canManageWallet: userPermissions.canManageWallet,
         });
         navigate('/');
       } else {

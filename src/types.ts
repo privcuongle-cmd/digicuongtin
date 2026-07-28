@@ -210,13 +210,40 @@ export interface ReturnSalesOrder {
   note?: string;
 }
 
+export interface UserPermissions {
+  canViewProfit?: boolean;
+  canManageSuppliers?: boolean;
+  canManageCashLedger?: boolean;
+  canManageWallet?: boolean;
+}
+
 export interface User {
   id: string;
   username: string;
   password?: string;
   name: string;
   role: 'ADMIN' | 'CASHIER' | 'STOCKKEEPER';
+  permissions?: UserPermissions;
+  canViewProfit?: boolean;
+  canManageSuppliers?: boolean;
+  canManageCashLedger?: boolean;
+  canManageWallet?: boolean;
 }
+
+export const hasPermission = (
+  user: User | null | undefined,
+  permission: keyof UserPermissions
+): boolean => {
+  if (!user) return false;
+  if (user.role === 'ADMIN') return true;
+  if (user.permissions && user.permissions[permission] !== undefined) {
+    return Boolean(user.permissions[permission]);
+  }
+  if ((user as any)[permission] !== undefined) {
+    return Boolean((user as any)[permission]);
+  }
+  return false;
+};
 
 export interface Serial {
   prodId: string;

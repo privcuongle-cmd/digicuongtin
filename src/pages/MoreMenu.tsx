@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
+import { hasPermission } from '../types';
 
 export const MoreMenu: React.FC = () => {
   const { currentUser, logout } = useAppContext();
@@ -48,8 +49,8 @@ export const MoreMenu: React.FC = () => {
         { label: 'Hóa đơn', icon: <FileText className="text-blue-500" />, path: '/invoices' },
         { label: 'Đặt hàng', icon: <ClipboardList className="text-blue-500" />, path: '#' },
         { label: 'Trả hàng', icon: <RotateCcw className="text-blue-500" />, path: '/return-sales' },
-        { label: 'Sổ quỹ', icon: <Wallet className="text-blue-500" />, path: '/cash-ledger' },
-        { label: 'Quản lý ví', icon: <CreditCard className="text-blue-500" />, path: '/wallets' },
+        ...(hasPermission(currentUser, 'canManageCashLedger') ? [{ label: 'Sổ quỹ', icon: <Wallet className="text-blue-500" />, path: '/cash-ledger' }] : []),
+        ...(hasPermission(currentUser, 'canManageWallet') ? [{ label: 'Quản lý ví', icon: <CreditCard className="text-blue-500" />, path: '/wallets' }] : []),
       ]
     },
     {
@@ -77,7 +78,7 @@ export const MoreMenu: React.FC = () => {
         { label: 'Cài đặt bản in', icon: <Printer className="text-blue-500" />, path: '/print-settings' },
         { label: 'Cấu hình Telegram', icon: <Send className="text-blue-500" />, path: '/telegram-settings' },
         { label: 'Quản lý nhân viên', icon: <User className="text-blue-500" />, path: '/users' },
-        ...(currentUser?.role === 'ADMIN' ? [{ label: 'Quản lý Ví', icon: <Wallet className="text-blue-500" />, path: '/wallets' }] : [])
+        ...(hasPermission(currentUser, 'canManageWallet') ? [{ label: 'Quản lý Ví', icon: <Wallet className="text-blue-500" />, path: '/wallets' }] : [])
       ]
     }
   ];

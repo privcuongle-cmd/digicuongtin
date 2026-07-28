@@ -777,7 +777,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             createdBy: String(e.createdBy || ''),
             note: String(e.note || '')
           })) : [],
-          users: apiUsers.length > 0 ? apiUsers : [],
+          users: apiUsers.length > 0 ? apiUsers.map((u: any) => {
+            let permissions = u.permissions;
+            if (typeof permissions === 'string') {
+              try { permissions = JSON.parse(permissions); } catch (e) { permissions = undefined; }
+            }
+            const canViewProfit = u.canViewProfit !== undefined ? (String(u.canViewProfit) === 'true' || u.canViewProfit === true) : permissions?.canViewProfit;
+            const canManageSuppliers = u.canManageSuppliers !== undefined ? (String(u.canManageSuppliers) === 'true' || u.canManageSuppliers === true) : permissions?.canManageSuppliers;
+            const canManageCashLedger = u.canManageCashLedger !== undefined ? (String(u.canManageCashLedger) === 'true' || u.canManageCashLedger === true) : permissions?.canManageCashLedger;
+            const canManageWallet = u.canManageWallet !== undefined ? (String(u.canManageWallet) === 'true' || u.canManageWallet === true) : permissions?.canManageWallet;
+            const role = u.role || 'CASHIER';
+
+            const userPermissions = {
+              canViewProfit: canViewProfit ?? (role === 'ADMIN'),
+              canManageSuppliers: canManageSuppliers ?? (role === 'ADMIN'),
+              canManageCashLedger: canManageCashLedger ?? (role === 'ADMIN'),
+              canManageWallet: canManageWallet ?? (role === 'ADMIN'),
+            };
+
+            return {
+              ...u,
+              id: String(u.id),
+              username: String(u.username || ''),
+              name: String(u.name || ''),
+              role,
+              permissions: userPermissions,
+              canViewProfit: userPermissions.canViewProfit,
+              canManageSuppliers: userPermissions.canManageSuppliers,
+              canManageCashLedger: userPermissions.canManageCashLedger,
+              canManageWallet: userPermissions.canManageWallet,
+            };
+          }) : [],
           printSettings: apiSettings.length > 0 ? {
             storeName: apiSettings[0].storeName || defaultPrintSettings.storeName,
             address: apiSettings[0].address || defaultPrintSettings.address,

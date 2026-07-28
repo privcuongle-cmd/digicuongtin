@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Wallet, Calendar, ArrowUpRight, ArrowDownLeft, FileText, Printer, X, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Wallet, Calendar, ArrowUpRight, ArrowDownLeft, FileText, Printer, X, Plus, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import { hasPermission } from '../types';
 import { useScrollLock } from '../hooks/useScrollLock';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { formatNumber, parseFormattedNumber, parseDateString } from '../lib/utils';
@@ -10,10 +11,20 @@ import { useMobileBackModal } from '../hooks/useMobileBackModal';
 import { formatDateTime } from '../lib/utils';
 
 export const CashLedger: React.FC = () => {
-  const { cashTransactions, addCashTransaction, wallets } = useAppContext();
+  const { cashTransactions, addCashTransaction, wallets, currentUser } = useAppContext();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'ALL' | 'RECEIPT' | 'PAYMENT'>('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  if (!hasPermission(currentUser, 'canManageCashLedger')) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-500 p-6">
+        <AlertCircle size={48} className="mb-4 text-red-400" />
+        <p className="text-lg font-bold text-slate-800">Truy cập bị từ chối</p>
+        <p className="text-sm text-slate-500">Bạn không có quyền sử dụng chức năng Sổ quỹ.</p>
+      </div>
+    );
+  }
 
   useScrollLock(isModalOpen);
   useEscapeKey(() => setIsModalOpen(false), isModalOpen);
