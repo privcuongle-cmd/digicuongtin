@@ -29,72 +29,98 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   useMobileBackModal(!!product, onClose);
 
   const productStockHistory = useMemo(() => {
-    const importHistory = importOrders.flatMap(order => 
-      (Array.isArray(order.items) ? order.items : []).filter(item => item.id === product.id).map(item => ({
-        prodId: item.id,
-        type: 'NHAP' as const,
-        qty: Number(item.qty) || 0,
-        partner: order.supplier,
-        date: order.date,
-        price: item.price,
-        refId: order.id,
-        sn: item.sn || []
-      }))
+    const targetPId = String(product.id).trim();
+
+    // Deduplicate orders by ID to prevent duplicate stock card entries
+    const deduplicateOrders = (orders: any[]): any[] => {
+      const seen = new Set<string>();
+      return (orders || []).filter((o: any) => {
+        if (!o || !o.id || seen.has(String(o.id).toUpperCase())) return false;
+        seen.add(String(o.id).toUpperCase());
+        return true;
+      });
+    };
+
+    const uniqueImportOrders = deduplicateOrders(importOrders);
+    const uniqueInvoices = deduplicateOrders(invoices);
+    const uniqueReturnImportOrders = deduplicateOrders(returnImportOrders);
+    const uniqueReturnSalesOrders = deduplicateOrders(returnSalesOrders);
+
+    const importHistory = uniqueImportOrders.flatMap(order => 
+      (Array.isArray(order.items) ? order.items : [])
+        .filter(item => String(item.id || item.productId || item.productID || '').trim() === targetPId)
+        .map(item => ({
+          prodId: item.id || product.id,
+          type: 'NHAP' as const,
+          qty: Number(item.qty) || 0,
+          partner: order.supplier,
+          date: order.date,
+          price: item.price,
+          refId: order.id,
+          sn: item.sn || []
+        }))
     );
     
-    const invoiceHistory = invoices.flatMap(inv => 
-      (Array.isArray(inv.items) ? inv.items : []).filter(item => item.id === product.id).map(item => ({
-        prodId: item.id,
-        type: 'XUAT' as const,
-        qty: Number(item.qty) || 0,
-        partner: inv.customer,
-        date: inv.date,
-        price: item.price,
-        refId: inv.id,
-        sn: Array.isArray(item.sn) ? item.sn : (item.sn ? item.sn.split(',').map(s => s.trim()) : [])
-      }))
+    const invoiceHistory = uniqueInvoices.flatMap(inv => 
+      (Array.isArray(inv.items) ? inv.items : [])
+        .filter(item => String(item.id || item.productId || item.productID || '').trim() === targetPId)
+        .map(item => ({
+          prodId: item.id || product.id,
+          type: 'XUAT' as const,
+          qty: Number(item.qty) || 0,
+          partner: inv.customer,
+          date: inv.date,
+          price: item.price,
+          refId: inv.id,
+          sn: Array.isArray(item.sn) ? item.sn : (item.sn ? String(item.sn).split(',').map(s => s.trim()).filter(Boolean) : [])
+        }))
     );
 
-    const returnImportHistory = returnImportOrders.flatMap(order => 
-      (Array.isArray(order.items) ? order.items : []).filter(item => item.id === product.id).map(item => ({
-        prodId: item.id,
-        type: 'TRA_NHAP' as const,
-        qty: Number(item.qty) || 0,
-        partner: order.supplier,
-        date: order.date,
-        price: item.price,
-        refId: order.id,
-        sn: item.sn || []
-      }))
+    const returnImportHistory = uniqueReturnImportOrders.flatMap(order => 
+      (Array.isArray(order.items) ? order.items : [])
+        .filter(item => String(item.id || item.productId || item.productID || '').trim() === targetPId)
+        .map(item => ({
+          prodId: item.id || product.id,
+          type: 'TRA_NHAP' as const,
+          qty: Number(item.qty) || 0,
+          partner: order.supplier,
+          date: order.date,
+          price: item.price,
+          refId: order.id,
+          sn: item.sn || []
+        }))
     );
 
-    const returnSalesHistory = returnSalesOrders.flatMap(order => 
-      (Array.isArray(order.items) ? order.items : []).filter(item => item.id === product.id).map(item => ({
-        prodId: item.id,
-        type: 'TRA_BAN' as const,
-        qty: Number(item.qty) || 0,
-        partner: order.customer,
-        date: order.date,
-        price: item.price,
-        refId: order.id,
-        sn: item.sn ? (typeof item.sn === 'string' ? item.sn.split(',') : item.sn) : []
-      }))
+    const returnSalesHistory = uniqueReturnSalesOrders.flatMap(order => 
+      (Array.isArray(order.items) ? order.items : [])
+        .filter(item => String(item.id || item.productId || item.productID || '').trim() === targetPId)
+        .map(item => ({
+          prodId: item.id || product.id,
+          type: 'TRA_BAN' as const,
+          qty: Number(item.qty) || 0,
+          partner: order.customer,
+          date: order.date,
+          price: item.price,
+          refId: order.id,
+          sn: item.sn ? (typeof item.sn === 'string' ? item.sn.split(',').map(s => s.trim()).filter(Boolean) : item.sn) : []
+        }))
     );
     
     // De-duplicate by refId if they exist in stockCards
-    const manualRefIds = new Set([
-      ...importHistory.map(h => h.refId),
-      ...invoiceHistory.map(h => h.refId),
-      ...returnImportHistory.map(h => h.refId),
-      ...returnSalesHistory.map(h => h.refId)
-    ]);
+    const documentRefIds = new Set([
+      ...uniqueImportOrders.map(o => String(o.id || '').trim().toUpperCase()),
+      ...uniqueInvoices.map(i => String(i.id || '').trim().toUpperCase()),
+      ...uniqueReturnImportOrders.map(r => String(r.id || '').trim().toUpperCase()),
+      ...uniqueReturnSalesOrders.map(r => String(r.id || '').trim().toUpperCase())
+    ].filter(Boolean));
 
     const adjustments = stockCards.filter(card => 
-      card.prodId === product.id && !manualRefIds.has(card.refId)
+      String(card.prodId || card.productId || '').trim() === targetPId && 
+      !documentRefIds.has(String(card.refId || '').trim().toUpperCase())
     ).map(card => ({
-      prodId: card.prodId,
+      prodId: card.prodId || product.id,
       type: card.type,
-      qty: card.qty,
+      qty: Number(card.qty) || 0,
       partner: card.partner,
       date: card.date,
       price: card.price,
@@ -102,26 +128,35 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
       sn: card.sn
     }));
 
-    const history = [...importHistory, ...invoiceHistory, ...returnImportHistory, ...returnSalesHistory, ...adjustments];
+    const rawHistory = [...importHistory, ...invoiceHistory, ...returnImportHistory, ...returnSalesHistory, ...adjustments];
     
+    // De-duplicate entries by refId + type + prodId
+    const historyMap = new Map<string, typeof rawHistory[0]>();
+    for (const entry of rawHistory) {
+      const key = `${entry.refId}_${entry.type}_${entry.prodId}`.toUpperCase();
+      if (!historyMap.has(key)) {
+        historyMap.set(key, entry);
+      }
+    }
+    const history = Array.from(historyMap.values());
+
     return history.sort((a, b) => parseDateString(b.date) - parseDateString(a.date));
   }, [product, stockCards, importOrders, invoices, returnImportOrders, returnSalesOrders]);
 
   const stockStats = useMemo(() => {
     return productStockHistory.reduce((acc, curr) => {
+      const q = Number(curr.qty) || 0;
       if (curr.type === 'NHAP' || curr.type === 'TRA_BAN') {
-        acc.totalIn += curr.qty;
+        acc.totalIn += q;
       } else if (curr.type === 'XUAT' || curr.type === 'TRA_NHAP') {
-        acc.totalOut += curr.qty;
+        acc.totalOut += q;
       }
       return acc;
     }, { totalIn: 0, totalOut: 0 });
   }, [productStockHistory]);
 
-  const initialStock = useMemo(() => {
-    if (product.isService) return 0;
-    return (product.stock || 0) - (stockStats.totalIn - stockStats.totalOut);
-  }, [product.stock, product.isService, stockStats.totalIn, stockStats.totalOut]);
+  const initialStock = 0;
+  const calculatedStock = initialStock + stockStats.totalIn - stockStats.totalOut;
 
   const filteredHistory = useMemo(() => {
     if (stockFilter === 'ALL') return productStockHistory;
@@ -131,14 +166,21 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   }, [productStockHistory, stockFilter]);
 
   const filteredSerials = useMemo(() => {
+    const targetPId = String(product.id).trim();
     return (serials || [])
-      .filter(s => s.prodId === product.id)
+      .filter(s => String(s.prodId || s.productId || '').trim() === targetPId)
       .filter(s => {
         if (serialStatusTab === 'IN_STOCK') return s.status !== 'SOLD';
         if (serialStatusTab === 'SOLD') return s.status === 'SOLD';
         return true;
       })
-      .filter(s => (s.sn || '').toLowerCase().includes(serialSearchTerm.toLowerCase()));
+      .filter(s => {
+        if (!serialSearchTerm.trim()) return true;
+        const term = serialSearchTerm.toLowerCase();
+        return (s.sn || '').toLowerCase().includes(term) || 
+               (s.refId || '').toLowerCase().includes(term) ||
+               (s.supplier || '').toLowerCase().includes(term);
+      });
   }, [product, serials, serialStatusTab, serialSearchTerm]);
 
   return (
@@ -185,7 +227,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 <div className="bg-[#f0fff4] px-2.5 py-2 rounded-lg border border-[#dcfce7] flex flex-col justify-center">
                   <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider mb-0.5">Tồn kho</span>
                   <p className="text-lg font-black text-emerald-700 leading-none truncate">
-                    {product.isService ? '---' : product.stock}
+                    {product.isService ? '---' : calculatedStock}
                   </p>
                 </div>
                 
@@ -273,11 +315,11 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                       <div className="text-slate-300 font-light text-[13px] shrink-0">=</div>
                       <div className="text-center flex-1 bg-emerald-50 py-1 rounded-md border border-emerald-100 shrink-0 min-w-[50px]">
                         <div className="text-[9px] text-emerald-600 font-bold uppercase leading-none">Tồn kho</div>
-                        <div className="text-[14px] font-black text-emerald-700 mt-0.5 leading-none">{product.stock}</div>
+                        <div className="text-[14px] font-black text-emerald-700 mt-0.5 leading-none">{calculatedStock}</div>
                       </div>
                     </div>
                     <p className="text-[10px] text-slate-400 leading-tight">
-                      * <span className="font-bold">Tồn ban đầu</span> là số lượng bạn đã nhập trực tiếp khi tạo mới thẻ sản phẩm này trong hệ thống.
+                      * <span className="font-bold">Tồn ban đầu</span> mặc định là 0. Tồn kho thực tế được tính từ tổng lượng nhập và xuất trong Thẻ kho.
                     </p>
                   </div>
                 )}

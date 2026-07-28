@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback, useRef } from 'react';
 import { AppState, Product, Customer, Supplier, Invoice, ImportOrder, CashTransaction, POSDraft, ImportDraft, MaintenanceRecord, MaintenanceTransfer, ReturnImportOrder, ReturnSalesOrder, User, Serial, StockCard, PrintSettings, ExternalSerial, ImageItem, Task, TelegramSettings, WifiRecord, CameraAccountRecord, CameraInstallation, Wallet } from '../types';
-import { apiService, getPendingQueue, replayPendingQueue } from '../services/api';
+import { apiService, getPendingQueue, replayPendingQueue, getCache } from '../services/api';
 import { generateId, resolveIdCollision } from '../lib/idUtils';
 import { formatDateTime, padPhone, formatSnForDb, parseSnFromDb, parseFormattedNumber, getCustomerDebt } from '../lib/utils';
 import { sendNotification, sendTelegramMessage } from '../lib/notification';
@@ -258,25 +258,91 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       ] = await Promise.all([fetchGroup1, fetchGroup2, fetchGroup3, fetchGroup4, fetchGroup5]);
 
 
-        const validApiProducts = (apiProducts || []).filter((p: any) => p && p.id && String(p.id).trim() !== '');
-        const mappedProducts = validApiProducts.length > 0 ? validApiProducts.map((p: any) => ({
-          id: String(p.id || ''),
-          name: String(p.name || ''),
-          price: parseFormattedNumber(p.salePrice),
-          importPrice: parseFormattedNumber(p.costPrice),
-          stock: Number(p.stock) || 0,
-          hasSerial: p.hasSerial === true || p.hasSerial === 'TRUE' || p.hasSerial === 'true' || p.hasSerial === 1,
-          isService: p.isService === true || p.isService === 'TRUE' || p.isService === 'true' || p.isService === 1,
-          color: 'bg-blue-600',
-          category: String(p.category || ''),
-          unit: String(p.unit || ''),
-          image: String(p.image || p.imageUrl || p.link_anh || p.AnhText || ''),
-          warrantyMonths: p.warrantyMonths || p.warranty || p.BaoHanh || p.warranty_months || p.wa ? Number(p.warrantyMonths || p.warranty || p.BaoHanh || p.warranty_months || p.wa) : undefined,
-          expectedOutOfStock: String(p.expectedOutOfStock || ''),
-          lowStockThreshold: Number(p.lowStockThreshold) || 0,
-          status: (p.status === 'Ngừng kinh doanh' || p.status === 'DISCONTINUED') ? 'Ngừng kinh doanh' : 'Đang kinh doanh',
-          createdAt: String(p.createdAt || p.date || p.timestamp || '')
-        })) : [];
+        const getFlexVal = (p: any, keys: string[]) => {
+          if (!p || typeof p !== 'object') return undefined;
+          for (const key of keys) {
+            if (p[key] !== undefined && p[key] !== null && String(p[key]).trim() !== '') {
+              return p[key];
+            }
+          }
+          const pKeys = Object.keys(p);
+          for (const searchKey of keys) {
+            const normSearch = searchKey.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/[\s\-_]+/g, "");
+            for (const k of pKeys) {
+              const normK = k.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/[\s\-_]+/g, "");
+              if (normK === normSearch && p[k] !== undefined && p[k] !== null && String(p[k]).trim() !== '') {
+                return p[k];
+              }
+            }
+          }
+          return undefined;
+        };
+
+        const rawProducts = (apiProducts && Array.isArray(apiProducts) && apiProducts.length > 0) 
+          ? apiProducts 
+          : (getCache('Products', true) || []);
+
+        const validApiProducts = (rawProducts || []).filter((p: any) => p && typeof p === 'object');
+        const mappedProducts = validApiProducts.length > 0 ? validApiProducts.map((p: any, idx: number) => {
+          const rawId = getFlexVal(p, ['id', 'ID', 'Id', 'code', 'Code', 'maHang', 'ma_hang', 'maSP', 'ma_sp', 'maSanPham', 'stt']);
+          const rawName = getFlexVal(p, ['name', 'Name', 'tenHang', 'ten_hang', 'tenSP', 'ten_sp', 'tenSanPham', 'title']);
+          const id = String(rawId || rawName || `SP${idx + 1}`).trim();
+          const name = String(rawName || rawId || 'Sản phẩm mới').trim();
+
+          const rawPrice = getFlexVal(p, ['salePrice', 'price', 'Price', 'giaban', 'giaBan', 'gia_ban']);
+          const price = parseFormattedNumber(rawPrice ?? 0);
+
+          const rawImportPrice = getFlexVal(p, ['costPrice', 'importPrice', 'cost', 'Cost', 'giavon', 'giaVon', 'gia_von']);
+          const importPrice = parseFormattedNumber(rawImportPrice ?? 0);
+
+          const rawStock = getFlexVal(p, ['stock', 'Stock', 'tonKho', 'tonkho', 'ton_kho', 'soLuong', 'soluong']);
+          const stock = rawStock !== undefined && rawStock !== null && rawStock !== '' ? Number(rawStock) : 0;
+
+          const rawHasSerial = getFlexVal(p, ['hasSerial', 'has_serial', 'serial', 'coSerial']);
+          const hasSerial = rawHasSerial === true || String(rawHasSerial).toUpperCase() === 'TRUE' || rawHasSerial === 1 || String(rawHasSerial) === '1';
+
+          const rawIsService = getFlexVal(p, ['isService', 'is_service', 'dichVu']);
+          const isService = rawIsService === true || String(rawIsService).toUpperCase() === 'TRUE' || rawIsService === 1 || String(rawIsService) === '1';
+
+          const category = String(getFlexVal(p, ['category', 'Category', 'nhomHang', 'nhom_hang', 'danhMuc']) || '').trim();
+          const brand = String(getFlexVal(p, ['brand', 'Brand', 'thuongHieu', 'thuong_hieu']) || '').trim();
+          const unit = String(getFlexVal(p, ['unit', 'Unit', 'donViTinh', 'don_vi_tinh', 'dvt', 'DVT']) || '').trim();
+          const image = String(getFlexVal(p, ['image', 'imageUrl', 'link_anh', 'AnhText', 'Image']) || '').trim();
+
+          const rawWarranty = getFlexVal(p, ['warrantyMonths', 'warranty', 'BaoHanh', 'warranty_months', 'wa']);
+          const warrantyMonths = rawWarranty ? Number(rawWarranty) : undefined;
+
+          const expectedOutOfStock = String(getFlexVal(p, ['expectedOutOfStock', 'expected_out_of_stock']) || '').trim();
+          const lowStockThreshold = Number(getFlexVal(p, ['lowStockThreshold', 'low_stock_threshold']) || 0);
+
+          const rawStatus = getFlexVal(p, ['status', 'Status', 'trangThai', 'trang_thai']);
+          const statusStr = String(rawStatus || '').trim().toLowerCase();
+          const status = (statusStr === 'ngừng kinh doanh' || statusStr === 'discontinued' || statusStr === 'inactive' || statusStr === 'ngung kinh doanh') ? 'Ngừng kinh doanh' : 'Đang kinh doanh';
+
+          const description = String(getFlexVal(p, ['description', 'Description', 'moTa', 'mo_ta']) || '').trim();
+          const createdAt = String(getFlexVal(p, ['createdAt', 'date', 'timestamp', 'created_at']) || '').trim();
+
+          return {
+            id,
+            name,
+            price,
+            importPrice,
+            stock,
+            hasSerial,
+            isService,
+            color: 'bg-blue-600',
+            category,
+            brand,
+            unit,
+            image,
+            warrantyMonths,
+            expectedOutOfStock,
+            lowStockThreshold,
+            status,
+            description,
+            createdAt
+          };
+        }) : [];
 
         const extractItems = (record: any, details: any[], parentIdKeys: string[], snAsString: boolean = false) => {
           // 1. Ưu tiên kiểm tra và xử lý dữ liệu từ cột JSON 'items'/'chitiet' trong bảng cha trước
@@ -288,7 +354,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               const itemsArray = Array.isArray(parsed) ? parsed : [];
               
               if (itemsArray.length > 0) {
-                return itemsArray.map((item: any) => {
+                const seenKeys = new Set<string>();
+                const uniqueItems: any[] = [];
+                for (const item of itemsArray) {
+                  const prodId = String(item.id || item.productId || item.productID || '');
+                  const key = item.id ? `${record.id || ''}_${prodId}` : prodId;
+                  if (!seenKeys.has(key)) {
+                    seenKeys.add(key);
+                    uniqueItems.push(item);
+                  }
+                }
+
+                return uniqueItems.map((item: any) => {
                   const prodId = String(item.id || item.productId || item.productID || '');
                   const product = mappedProducts.find((p: any) => p.id === prodId);
                   const snArray = parseSnFromDb(item.sn || item.serials || []);
@@ -317,7 +394,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           });
 
           if (matchingDetails.length > 0) {
-            return matchingDetails.map((d: any) => {
+            const seenDetailKeys = new Set<string>();
+            const uniqueDetails: any[] = [];
+            for (const d of matchingDetails) {
+              const prodId = String(d.productId || d.productID || d.ProductID || d.productid || '');
+              const key = d.id ? String(d.id).trim().toUpperCase() : `${recordId}_${prodId}`;
+              if (!seenDetailKeys.has(key)) {
+                seenDetailKeys.add(key);
+                uniqueDetails.push(d);
+              }
+            }
+
+            return uniqueDetails.map((d: any) => {
               const prodId = String(d.productId || d.productID || d.ProductID || d.productid || '');
               const product = mappedProducts.find((p: any) => p.id === prodId);
               const qty = Number(d.quantity || d.qty || d.Quantity || d.Qty || d.quan || d.Quan || 0);
@@ -436,16 +524,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const processSerials = (items: any[], action: 'add' | 'delete') => {
           items.forEach((item: any) => {
             let sns: string[] = [];
-            if (Array.isArray(item.sn)) {
-              sns = item.sn;
-            } else if (typeof item.sn === 'string' && item.sn.trim() !== '') {
+            const rawSn = item.sn || item.serials || item.SN || item.serial || item.Serials;
+            if (Array.isArray(rawSn)) {
+              sns = rawSn;
+            } else if (typeof rawSn === 'string' && rawSn.trim() !== '') {
               // Handle comma-separated serials from invoices
-              sns = item.sn.split(',').map((s: string) => s.trim()).filter(Boolean);
+              sns = rawSn.split(',').map((s: string) => s.trim()).filter(Boolean);
             }
             
             sns.forEach(s => {
-              if (action === 'add') soldSerials.add(s);
-              else soldSerials.delete(s);
+              const cleaned = String(s).trim().toUpperCase();
+              if (cleaned) {
+                if (action === 'add') soldSerials.add(cleaned);
+                else soldSerials.delete(cleaned);
+              }
             });
           });
         };
@@ -458,7 +550,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const importSerialsList: any[] = [];
         mappedImports.forEach((imp: any) => {
           imp.items.forEach((item: any) => {
-            const snVal = item.sn;
+            const snVal = item.sn || item.serials || item.SN || item.serial || item.Serials;
             let sns: string[] = [];
             if (Array.isArray(snVal)) {
               sns = snVal;
@@ -469,6 +561,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             sns.forEach((sn: string) => {
               const cleanedSn = sn.trim();
               if (cleanedSn) {
+                const upperSn = cleanedSn.toUpperCase();
                 importSerialsList.push({
                   prodId: item.id,
                   sn: cleanedSn,
@@ -476,7 +569,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                   importPrice: item.price,
                   date: imp.date,
                   refId: imp.id,
-                  status: soldSerials.has(cleanedSn) ? 'SOLD' : 'AVAILABLE'
+                  status: soldSerials.has(upperSn) ? 'SOLD' : 'AVAILABLE'
                 });
               }
             });
@@ -495,6 +588,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if (sn) {
               const upperSn = sn.toUpperCase();
               const existing = serialsBySn.get(upperSn);
+              const dbStatus = String(s.status || '').trim().toUpperCase();
+              const isDbSold = dbStatus === 'SOLD' || dbStatus === 'ĐÃ BÁN' || dbStatus === 'ĐABAN' || dbStatus === 'XUAT' || dbStatus === 'XUẤT';
+              const isSold = isDbSold || soldSerials.has(upperSn);
               serialsBySn.set(upperSn, {
                 prodId: String(s.prodId || existing?.prodId || ''),
                 sn,
@@ -502,13 +598,79 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 importPrice: s.importPrice !== undefined && s.importPrice !== '' ? parseFormattedNumber(s.importPrice) : (existing?.importPrice || 0),
                 date: formatDateTime(s.createdAt || s.date || existing?.date),
                 refId: String(s.refId || existing?.refId || ''),
-                status: soldSerials.has(sn) ? 'SOLD' : 'AVAILABLE'
+                status: isSold ? 'SOLD' : 'AVAILABLE'
               });
             }
           });
         }
 
         const mergedSerials = Array.from(serialsBySn.values());
+
+        const documentRefIds = new Set([
+          ...mappedImports.map((i: any) => String(i.id || '').trim().toUpperCase()),
+          ...mappedInvoices.map((i: any) => String(i.id || '').trim().toUpperCase()),
+          ...mappedReturnImports.map((r: any) => String(r.id || '').trim().toUpperCase()),
+          ...mappedReturnSales.map((r: any) => String(r.id || '').trim().toUpperCase())
+        ].filter(Boolean));
+
+        const reconciledProducts = mappedProducts.map((p: any) => {
+          if (p.isService) return p;
+
+          const targetPId = String(p.id).trim();
+
+          let totalIn = 0;
+          mappedImports.forEach((imp: any) => {
+            (Array.isArray(imp.items) ? imp.items : []).forEach((item: any) => {
+              const pid = String(item.id || item.productId || item.productID || '').trim();
+              if (pid === targetPId) {
+                totalIn += (Number(item.qty) || 0);
+              }
+            });
+          });
+          mappedReturnSales.forEach((ret: any) => {
+            (Array.isArray(ret.items) ? ret.items : []).forEach((item: any) => {
+              const pid = String(item.id || item.productId || item.productID || '').trim();
+              if (pid === targetPId) {
+                totalIn += (Number(item.qty) || 0);
+              }
+            });
+          });
+
+          let totalOut = 0;
+          mappedInvoices.forEach((inv: any) => {
+            (Array.isArray(inv.items) ? inv.items : []).forEach((item: any) => {
+              const pid = String(item.id || item.productId || item.productID || '').trim();
+              if (pid === targetPId) {
+                totalOut += (Number(item.qty) || 0);
+              }
+            });
+          });
+          mappedReturnImports.forEach((ret: any) => {
+            (Array.isArray(ret.items) ? ret.items : []).forEach((item: any) => {
+              const pid = String(item.id || item.productId || item.productID || '').trim();
+              if (pid === targetPId) {
+                totalOut += (Number(item.qty) || 0);
+              }
+            });
+          });
+
+          let manualAdj = 0;
+          (apiStockCards || []).forEach((sc: any) => {
+            const scProdId = String(sc.prodId || sc.productId || sc.productID || '').trim();
+            const scRefId = String(sc.refId || '').trim().toUpperCase();
+            if (scProdId === targetPId && !documentRefIds.has(scRefId)) {
+              const q = Number(sc.qty) || 0;
+              if (sc.type === 'NHAP' || sc.type === 'TRA_BAN') manualAdj += q;
+              else if (sc.type === 'XUAT' || sc.type === 'TRA_NHAP') manualAdj -= q;
+            }
+          });
+
+          const calcStock = totalIn - totalOut + manualAdj;
+          return {
+            ...p,
+            stock: calcStock
+          };
+        });
 
         setState(prev => {
           const validApiBrands = (apiBrands || []).filter((b: any) => b && b.id && String(b.id).trim() !== '');
@@ -518,7 +680,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
           return {
             ...prev,
-            products: mappedProducts,
+            products: reconciledProducts,
             brands: validApiBrands.length > 0 ? validApiBrands.map((b: any) => ({
               id: String(b.id || ''),
               name: String(b.name || '')
@@ -1502,14 +1664,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
 
     setState(prev => {
-      const otherOrders = isUpdate 
-        ? (prev.importOrders || []).filter(o => o.id !== newOrder.id)
-        : (prev.importOrders || []);
+      const otherOrders = (prev.importOrders || []).filter(o => o.id !== newOrder.id);
 
       return { 
         ...prev, 
-        importOrders: [...otherOrders, newOrder],
-        stockCards: [...(prev.stockCards || []).filter(sc => sc.refId !== newOrder.id), ...newStockCards],
+        importOrders: deduplicateById([...otherOrders, newOrder]),
+        stockCards: deduplicateById([...(prev.stockCards || []).filter(sc => sc.refId !== newOrder.id), ...newStockCards]),
         products: updatedProducts,
         cashTransactions: updatedCashTransactions
       };

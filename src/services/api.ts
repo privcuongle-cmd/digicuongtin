@@ -6,7 +6,7 @@ const IMAGE_SHEET_ID = '1BvCMwAq5zItV3fEqAy1saP7eTMQ66orrZ4CG6H_ecgM';
 const CACHE_TTL = 5 * 60 * 1000; // 5 phút
 const CACHE_PREFIX = 'DIGIKIOT_CACHE_';
 
-const getCache = (key: string, ignoreExpiry = false) => {
+export const getCache = (key: string, ignoreExpiry = false) => {
   try {
     const cached = localStorage.getItem(CACHE_PREFIX + key);
     if (!cached) return null;
@@ -357,7 +357,7 @@ export const apiService = {
       try {
         result = JSON.parse(text);
       } catch (e) {
-        console.error(`[API] Create ${sheetName} failed (Status: ${response.status}) - Invalid JSON:`, text.substring(0, 500));
+        console.warn(`[API] Create ${sheetName} received non-JSON response (Status: ${response.status})`);
         
         if (retries > 0) {
           console.log(`[API] Retrying create ${sheetName}... (${retries} left)`);
@@ -365,7 +365,9 @@ export const apiService = {
           return apiService.createRecord(sheetName, data, retries - 1);
         }
         
-        return { success: false, message: 'Server trả về định dạng không hợp lệ' };
+        addToQueue('create', sheetName, undefined, data);
+        triggerOfflineStatus(null);
+        return { success: true, offlineQueued: true, message: 'Máy chủ bận, thao tác đã được lưu tạm để đồng bộ sau' };
       }
       
       if (result.success) clearCache(sheetName);
@@ -373,19 +375,15 @@ export const apiService = {
     } catch (error) {
       console.error(`Create error on ${sheetName}:`, error);
       
-      // Nếu lỗi kết nối mạng, cho vào Queue ngoại tuyến!
-      if (error instanceof TypeError || String(error).includes('fetch') || String(error).includes('Network')) {
-        console.warn(`[OFFLINE] Network fetch error during create, queueing operation for: ${sheetName}`);
-        addToQueue('create', sheetName, undefined, data);
-        triggerOfflineStatus(true);
-        return { success: true, offlineQueued: true, message: 'Lỗi mạng, thao tác đã được lưu tạm ngoại tuyến' };
-      }
-
       if (retries > 0) {
         await new Promise(r => setTimeout(r, 1000));
         return apiService.createRecord(sheetName, data, retries - 1);
       }
-      return { success: false };
+
+      console.warn(`[OFFLINE] Network error during create, queueing operation for: ${sheetName}`);
+      addToQueue('create', sheetName, undefined, data);
+      triggerOfflineStatus(null);
+      return { success: true, offlineQueued: true, message: 'Thao tác đã được lưu tạm để đồng bộ sau' };
     }
   },
 
@@ -413,7 +411,7 @@ export const apiService = {
       try {
         result = JSON.parse(text);
       } catch (e) {
-        console.error(`[API] Update ${sheetName} failed (Status: ${response.status}) - Invalid JSON:`, text.substring(0, 500));
+        console.warn(`[API] Update ${sheetName} received non-JSON response (Status: ${response.status})`);
         
         if (retries > 0) {
           console.log(`[API] Retrying update ${sheetName}... (${retries} left)`);
@@ -421,7 +419,9 @@ export const apiService = {
           return apiService.updateRecord(sheetName, id, data, retries - 1);
         }
 
-        return { success: false, message: 'Server trả về định dạng không hợp lệ' };
+        addToQueue('update', sheetName, id, data);
+        triggerOfflineStatus(null);
+        return { success: true, offlineQueued: true, message: 'Máy chủ bận, thao tác đã được lưu tạm để đồng bộ sau' };
       }
       
       if (result.success) clearCache(sheetName);
@@ -429,19 +429,15 @@ export const apiService = {
     } catch (error) {
       console.error(`Update error on ${sheetName}:`, error);
 
-      // Nếu lỗi kết nối mạng, cho vào Queue ngoại tuyến!
-      if (error instanceof TypeError || String(error).includes('fetch') || String(error).includes('Network')) {
-        console.warn(`[OFFLINE] Network fetch error during update, queueing operation for: ${sheetName}`);
-        addToQueue('update', sheetName, id, data);
-        triggerOfflineStatus(true);
-        return { success: true, offlineQueued: true, message: 'Lỗi mạng, thao tác đã được lưu tạm ngoại tuyến' };
-      }
-
       if (retries > 0) {
         await new Promise(r => setTimeout(r, 1000));
         return apiService.updateRecord(sheetName, id, data, retries - 1);
       }
-      return { success: false };
+
+      console.warn(`[OFFLINE] Network error during update, queueing operation for: ${sheetName}`);
+      addToQueue('update', sheetName, id, data);
+      triggerOfflineStatus(null);
+      return { success: true, offlineQueued: true, message: 'Thao tác đã được lưu tạm để đồng bộ sau' };
     }
   },
 
@@ -468,7 +464,7 @@ export const apiService = {
       try {
         result = JSON.parse(text);
       } catch (e) {
-        console.error(`[API] Delete ${sheetName} failed (Status: ${response.status}) - Invalid JSON:`, text.substring(0, 500));
+        console.warn(`[API] Delete ${sheetName} received non-JSON response (Status: ${response.status})`);
         
         if (retries > 0) {
           console.log(`[API] Retrying delete ${sheetName}... (${retries} left)`);
@@ -476,7 +472,9 @@ export const apiService = {
           return apiService.deleteRecord(sheetName, id, retries - 1);
         }
 
-        return { success: false, message: 'Server trả về định dạng không hợp lệ' };
+        addToQueue('delete', sheetName, id, undefined);
+        triggerOfflineStatus(null);
+        return { success: true, offlineQueued: true, message: 'Máy chủ bận, thao tác đã được lưu tạm để đồng bộ sau' };
       }
       
       if (result.success) clearCache(sheetName);
@@ -484,19 +482,15 @@ export const apiService = {
     } catch (error) {
       console.error(`Delete error on ${sheetName}:`, error);
 
-      // Nếu lỗi kết nối mạng, cho vào Queue ngoại tuyến!
-      if (error instanceof TypeError || String(error).includes('fetch') || String(error).includes('Network')) {
-        console.warn(`[OFFLINE] Network fetch error during delete, queueing operation for: ${sheetName}`);
-        addToQueue('delete', sheetName, id, undefined);
-        triggerOfflineStatus(true);
-        return { success: true, offlineQueued: true, message: 'Lỗi mạng, thao tác đã được lưu tạm ngoại tuyến' };
-      }
-
       if (retries > 0) {
         await new Promise(r => setTimeout(r, 1000));
         return apiService.deleteRecord(sheetName, id, retries - 1);
       }
-      return { success: false };
+
+      console.warn(`[OFFLINE] Network error during delete, queueing operation for: ${sheetName}`);
+      addToQueue('delete', sheetName, id, undefined);
+      triggerOfflineStatus(null);
+      return { success: true, offlineQueued: true, message: 'Thao tác đã được lưu tạm để đồng bộ sau' };
     }
   },
 
@@ -511,11 +505,22 @@ export const apiService = {
         redirect: 'follow'
       });
       const text = await response.text();
-      const result = JSON.parse(text);
-      if (result.success) clearCache(sheetName);
+      let result;
+      try {
+        result = JSON.parse(text);
+      } catch (parseErr) {
+        console.warn(`[API] Raw create ${sheetName} received non-JSON response`);
+        if (retries > 0) {
+          await new Promise(r => setTimeout(r, 1000));
+          return apiService.createRecordRaw(sheetName, data, retries - 1);
+        }
+        return { success: false, message: 'Non-JSON response' };
+      }
+
+      if (result && result.success) clearCache(sheetName);
       return result;
     } catch (e) {
-      console.error(`[API] Raw create failed on ${sheetName}:`, e);
+      console.warn(`[API] Raw create failed on ${sheetName}:`, e);
       if (retries > 0) {
         await new Promise(r => setTimeout(r, 1000));
         return apiService.createRecordRaw(sheetName, data, retries - 1);
@@ -534,11 +539,22 @@ export const apiService = {
         redirect: 'follow'
       });
       const text = await response.text();
-      const result = JSON.parse(text);
-      if (result.success) clearCache(sheetName);
+      let result;
+      try {
+        result = JSON.parse(text);
+      } catch (parseErr) {
+        console.warn(`[API] Raw update ${sheetName} received non-JSON response`);
+        if (retries > 0) {
+          await new Promise(r => setTimeout(r, 1000));
+          return apiService.updateRecordRaw(sheetName, id, data, retries - 1);
+        }
+        return { success: false, message: 'Non-JSON response' };
+      }
+
+      if (result && result.success) clearCache(sheetName);
       return result;
     } catch (e) {
-      console.error(`[API] Raw update failed on ${sheetName}:`, e);
+      console.warn(`[API] Raw update failed on ${sheetName}:`, e);
       if (retries > 0) {
         await new Promise(r => setTimeout(r, 1000));
         return apiService.updateRecordRaw(sheetName, id, data, retries - 1);
@@ -556,11 +572,22 @@ export const apiService = {
         redirect: 'follow'
       });
       const text = await response.text();
-      const result = JSON.parse(text);
-      if (result.success) clearCache(sheetName);
+      let result;
+      try {
+        result = JSON.parse(text);
+      } catch (parseErr) {
+        console.warn(`[API] Raw delete ${sheetName} received non-JSON response`);
+        if (retries > 0) {
+          await new Promise(r => setTimeout(r, 1000));
+          return apiService.deleteRecordRaw(sheetName, id, retries - 1);
+        }
+        return { success: false, message: 'Non-JSON response' };
+      }
+
+      if (result && result.success) clearCache(sheetName);
       return result;
     } catch (e) {
-      console.error(`[API] Raw delete failed on ${sheetName}:`, e);
+      console.warn(`[API] Raw delete failed on ${sheetName}:`, e);
       if (retries > 0) {
         await new Promise(r => setTimeout(r, 1000));
         return apiService.deleteRecordRaw(sheetName, id, retries - 1);

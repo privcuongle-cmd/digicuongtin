@@ -139,6 +139,15 @@ return (
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(20);
 
+  const removeAccents = (str: string) => {
+    return (str || '')
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/đ/g, "d")
+      .replace(/Đ/g, "D")
+      .toLowerCase();
+  };
+
   const filteredProducts = useMemo(() => {
     let result = products || [];
     
@@ -160,11 +169,27 @@ return (
       return [...result].reverse();
     }
     
+    const term = removeAccents(searchTerm.trim());
+    const termNoSpaces = term.replace(/[\s\-_]+/g, '');
+
     return result
-      .filter(p => 
-        (p.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
-        (p.id || '').toLowerCase().includes(searchTerm.toLowerCase())
-      )
+      .filter(p => {
+        const name = removeAccents(p.name);
+        const nameNoSpaces = name.replace(/[\s\-_]+/g, '');
+        const id = removeAccents(p.id);
+        const idNoSpaces = id.replace(/[\s\-_]+/g, '');
+        const category = removeAccents(p.category || '');
+        const brand = removeAccents(p.brand || '');
+        const description = removeAccents(p.description || '');
+
+        return name.includes(term) ||
+               id.includes(term) ||
+               category.includes(term) ||
+               brand.includes(term) ||
+               description.includes(term) ||
+               nameNoSpaces.includes(termNoSpaces) ||
+               idNoSpaces.includes(termNoSpaces);
+      })
       .reverse();
   }, [products, searchTerm, activeFilter, statusFilter, categoryFilter]);
 
@@ -212,21 +237,8 @@ return (
       for (const p of products) {
         if (p.isService) continue;
 
-        // Calculate expected stock from stock cards
-        const cards = stockCards.filter(sc => sc.prodId === p.id);
-        let calculatedStock = 0;
-
-        cards.forEach(sc => {
-          const qty = Number(sc.qty) || 0;
-          if (sc.type === 'NHAP' || sc.type === 'TRA_BAN') {
-            calculatedStock += qty;
-          } else if (sc.type === 'XUAT' || sc.type === 'TRA_NHAP') {
-            calculatedStock -= qty;
-          }
-        });
-
-        // Ensure stock is not negative
-        calculatedStock = Math.max(0, calculatedStock);
+        // Calculate expected stock from all transactions
+        const calculatedStock = getNetTransactionsForProduct(p.id);
 
         if (p.stock !== calculatedStock) {
           console.log(`Reconciling product ${p.id} (${p.name}): current stock ${p.stock} -> calculated stock ${calculatedStock}`);
@@ -256,6 +268,86 @@ return (
     return brands.filter(b => b.name.toLowerCase().includes(search));
   }, [brands, brandSearch, isBrandDropdownOpen]);
 
+  const getNetTransactionsForProduct = (prodId: string) => {
+    let net = 0;
+    const targetPId = String(prodId).trim();
+    
+    const documentRefIds = new Set([
+      ...importOrders.map(o => String(o.id || '').trim().toUpperCase()),
+      ...invoices.map(i => String(i.id || '').trim().toUpperCase()),
+      ...returnImportOrders.map(r => String(r.id || '').trim().toUpperCase()),
+      ...returnSalesOrders.map(r => String(r.id || '').trim().toUpperCase())
+    ].filter(Boolean));
+    
+    const seenImp = new Set<string>();
+    importOrders.forEach(order => {
+      if (!order || !order.id || seenImp.has(order.id.toUpperCase())) return;
+      seenImp.add(order.id.toUpperCase());
+
+      (Array.isArray(order.items) ? order.items : []).forEach(item => {
+        const pid = String(item.id || item.productId || item.productID || '').trim();
+        if (pid === targetPId) {
+          net += (Number(item.qty) || 0);
+        }
+      });
+    });
+
+    const seenInv = new Set<string>();
+    invoices.forEach(inv => {
+      if (!inv || !inv.id || seenInv.has(inv.id.toUpperCase())) return;
+      seenInv.add(inv.id.toUpperCase());
+
+      (Array.isArray(inv.items) ? inv.items : []).forEach(item => {
+        const pid = String(item.id || item.productId || item.productID || '').trim();
+        if (pid === targetPId) {
+          net -= (Number(item.qty) || 0);
+        }
+      });
+    });
+
+    const seenRetImp = new Set<string>();
+    returnImportOrders.forEach(order => {
+      if (!order || !order.id || seenRetImp.has(order.id.toUpperCase())) return;
+      seenRetImp.add(order.id.toUpperCase());
+
+      (Array.isArray(order.items) ? order.items : []).forEach(item => {
+        const pid = String(item.id || item.productId || item.productID || '').trim();
+        if (pid === targetPId) {
+          net -= (Number(item.qty) || 0);
+        }
+      });
+    });
+
+    const seenRetSales = new Set<string>();
+    returnSalesOrders.forEach(order => {
+      if (!order || !order.id || seenRetSales.has(order.id.toUpperCase())) return;
+      seenRetSales.add(order.id.toUpperCase());
+
+      (Array.isArray(order.items) ? order.items : []).forEach(item => {
+        const pid = String(item.id || item.productId || item.productID || '').trim();
+        if (pid === targetPId) {
+          net += (Number(item.qty) || 0);
+        }
+      });
+    });
+
+    const seenSC = new Set<string>();
+    stockCards.forEach(card => {
+      const scProdId = String(card.prodId || card.productId || '').trim();
+      const scRefId = String(card.refId || '').trim().toUpperCase();
+      const scKey = card.id ? card.id.toUpperCase() : `${scRefId}_${card.type}_${scProdId}`.toUpperCase();
+
+      if (scProdId === targetPId && !documentRefIds.has(scRefId) && !seenSC.has(scKey)) {
+        seenSC.add(scKey);
+        const qty = Number(card.qty) || 0;
+        if (card.type === 'NHAP' || card.type === 'TRA_BAN') net += qty;
+        else if (card.type === 'XUAT' || card.type === 'TRA_NHAP') net -= qty;
+      }
+    });
+
+    return net;
+  };
+
   const handleSave = () => {
     if (!name || !price) {
       alert('Vui lòng nhập đủ tên và giá bán');
@@ -275,12 +367,15 @@ return (
     }
 
     if (selectedProduct) {
+      const netTrans = getNetTransactionsForProduct(selectedProduct.id);
+      const updatedStock = pType === 'service' ? null : netTrans;
+
       // Update existing product - background API call
       updateProduct(selectedProduct.id, {
         name,
         price: parseFormattedNumber(price),
         importPrice: parseFormattedNumber(cost) || 0,
-        stock: pType === 'service' ? null : Number(stock) || 0,
+        stock: updatedStock,
         hasSerial: pType === 'service' ? false : hasSerial,
         isService: pType === 'service',
         warrantyMonths: Number(warrantyMonths) || 0,
@@ -302,7 +397,7 @@ return (
         name,
         price: parseFormattedNumber(price),
         importPrice: parseFormattedNumber(cost) || 0,
-        stock: pType === 'service' ? null : Number(stock) || 0,
+        stock: pType === 'service' ? null : 0,
         hasSerial: pType === 'service' ? false : hasSerial,
         isService: pType === 'service',
         color: pType === 'service' ? 'bg-emerald-600' : colors[products.length % colors.length],
@@ -324,12 +419,15 @@ return (
 
     // If we're editing, update the selectedProduct state so the detail modal stays open with updated info
     if (selectedProduct) {
+      const netTrans = getNetTransactionsForProduct(selectedProduct.id);
+      const updatedStock = pType === 'service' ? null : netTrans;
+
       setSelectedProduct({
         ...selectedProduct,
         name,
         price: parseFormattedNumber(price),
         importPrice: parseFormattedNumber(cost) || 0,
-        stock: pType === 'service' ? null : Number(stock) || 0,
+        stock: updatedStock,
         hasSerial: pType === 'service' ? false : hasSerial,
         isService: pType === 'service',
         warrantyMonths: Number(warrantyMonths) || 0,
@@ -352,8 +450,22 @@ return (
   const productStockHistory = useMemo(() => {
     if (!selectedProduct) return [];
     
+    const deduplicateOrders = (orders: any[]): any[] => {
+      const seen = new Set<string>();
+      return (orders || []).filter((o: any) => {
+        if (!o || !o.id || seen.has(String(o.id).toUpperCase())) return false;
+        seen.add(String(o.id).toUpperCase());
+        return true;
+      });
+    };
+
+    const uniqueImportOrders = deduplicateOrders(importOrders);
+    const uniqueInvoices = deduplicateOrders(invoices);
+    const uniqueReturnImportOrders = deduplicateOrders(returnImportOrders);
+    const uniqueReturnSalesOrders = deduplicateOrders(returnSalesOrders);
+
     // Derived from sources of truth
-    const importHistory = importOrders.flatMap(order => 
+    const importHistory = uniqueImportOrders.flatMap(order => 
       (Array.isArray(order.items) ? order.items : []).filter(item => item.id === selectedProduct.id).map(item => ({
         prodId: item.id,
         type: 'NHAP' as const,
@@ -366,7 +478,7 @@ return (
       }))
     );
     
-    const invoiceHistory = invoices.flatMap(inv => 
+    const invoiceHistory = uniqueInvoices.flatMap(inv => 
       (Array.isArray(inv.items) ? inv.items : []).filter(item => item.id === selectedProduct.id).map(item => ({
         prodId: item.id,
         type: 'XUAT' as const,
@@ -379,7 +491,7 @@ return (
       }))
     );
 
-    const returnImportHistory = returnImportOrders.flatMap(order => 
+    const returnImportHistory = uniqueReturnImportOrders.flatMap(order => 
       (Array.isArray(order.items) ? order.items : []).filter(item => item.id === selectedProduct.id).map(item => ({
         prodId: item.id,
         type: 'TRA_NHAP' as const,
@@ -392,7 +504,7 @@ return (
       }))
     );
 
-    const returnSalesHistory = returnSalesOrders.flatMap(order => 
+    const returnSalesHistory = uniqueReturnSalesOrders.flatMap(order => 
       (Array.isArray(order.items) ? order.items : []).filter(item => item.id === selectedProduct.id).map(item => ({
         prodId: item.id,
         type: 'TRA_BAN' as const,
@@ -426,8 +538,17 @@ return (
       sn: card.sn
     }));
 
-    const history = [...importHistory, ...invoiceHistory, ...returnImportHistory, ...returnSalesHistory, ...adjustments];
+    const rawHistory = [...importHistory, ...invoiceHistory, ...returnImportHistory, ...returnSalesHistory, ...adjustments];
     
+    const historyMap = new Map<string, typeof rawHistory[0]>();
+    for (const entry of rawHistory) {
+      const key = `${entry.refId}_${entry.type}_${entry.prodId}`.toUpperCase();
+      if (!historyMap.has(key)) {
+        historyMap.set(key, entry);
+      }
+    }
+    const history = Array.from(historyMap.values());
+
     return history.sort((a, b) => parseDateString(b.date) - parseDateString(a.date));
   }, [selectedProduct, stockCards, importOrders, invoices, returnImportOrders, returnSalesOrders]);
 
@@ -733,7 +854,7 @@ return (
             setName(p.name);
             setPrice(p.price.toString());
             setCost((p.importPrice || 0).toString());
-            setStock(p.stock?.toString() || '');
+            setStock('0');
             setHasSerial(p.hasSerial || false);
             setWarrantyMonths(p.warrantyMonths?.toString() || '');
             setUnit(p.unit || '');
@@ -1135,19 +1256,7 @@ return (
                     </div>
 
                     {/* Secondary Info Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {pType === 'product' && (
-                        <div>
-                          <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest ml-1 block mb-1.5">Tồn đầu kỳ</label>
-                          <input 
-                            type="number" 
-                            value={stock}
-                            onChange={(e) => setStock(e.target.value)}
-                            className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-400 transition-all shadow-sm font-bold" 
-                            placeholder="0" 
-                          />
-                        </div>
-                      )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest ml-1 block mb-1.5">Đơn vị tính</label>
                         <input 
